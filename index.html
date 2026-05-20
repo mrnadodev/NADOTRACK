@@ -909,15 +909,20 @@ tbody td {
     </div>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
-    <div class="stat-card" style="grid-column:span 2;">
+    <div class="stat-card">
       <div class="stat-icon-row"><span class="stat-icon">🏆</span><span class="stat-label">Meilleur jour</span></div>
       <div class="stat-value pos" id="d-best">—</div>
       <div class="stat-sub" id="d-best-date">—</div>
     </div>
-    <div class="stat-card" style="grid-column:span 2;">
+    <div class="stat-card">
       <div class="stat-icon-row"><span class="stat-icon">⊘</span><span class="stat-label">Pire jour</span></div>
       <div class="stat-value neg" id="d-worst">—</div>
       <div class="stat-sub" id="d-worst-date">—</div>
+    </div>
+    <div class="stat-card" style="grid-column:span 2;">
+      <div class="stat-icon-row"><span class="stat-icon">📆</span><span class="stat-label">Jours tradés</span></div>
+      <div class="stat-value neu" id="d-trade-days">—</div>
+      <div class="stat-sub" id="d-trade-days-sub">jours distincts avec au moins 1 trade</div>
     </div>
   </div>
   <!-- hidden refs kept for JS compat -->
@@ -1719,7 +1724,15 @@ function renderDashboard() {
   const wDate = document.getElementById('d-worst-date');
   if (wDate) wDate.textContent = worstDate;
 
-  renderEquityChart(data);
+  // Jours tradés
+  const tradingDays = Object.keys(dailyMap).length;
+  const tdEl = document.getElementById('d-trade-days');
+  if (tdEl) { tdEl.textContent = tradingDays; tdEl.className = 'stat-value neu'; }
+  const tdSub = document.getElementById('d-trade-days-sub');
+  if (tdSub) {
+    const avg = tradingDays > 0 ? (data.length / tradingDays).toFixed(1) : '0';
+    tdSub.textContent = `avg ${avg} trades/jour · ${tradingDays} jour${tradingDays > 1 ? 's' : ''} distincts`;
+  }
   renderDashSummary();
 }
 
