@@ -6,6 +6,7 @@
 <title>NADO TRACK — Trading Command Center</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg:    #111111;
@@ -619,6 +620,112 @@ tbody td {
 .toast.success { border-color: rgba(0,230,118,.4); }
 .toast.error   { border-color: rgba(255,23,68,.4); }
 
+/* ── JOURNAL CALENDAR GRID ── */
+.cal-month-label {
+  font-size:16px; font-weight:700; margin-bottom:14px; color:var(--text);
+}
+.cal-grid {
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap:4px;
+  margin-bottom:24px;
+}
+.cal-day-header {
+  text-align:center;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text3);
+  padding:8px 0;
+}
+.cal-cell {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:8px;
+  min-height:90px;
+  padding:10px;
+  position:relative;
+  transition:border-color .15s;
+  cursor:default;
+}
+.cal-cell.empty {
+  background:var(--bg2);
+  border-color:var(--border);
+  opacity:.35;
+}
+.cal-cell.has-trades { cursor:pointer; }
+.cal-cell.has-trades:hover { border-color:var(--border2); }
+.cal-cell.day-pos { border-color:rgba(46,204,113,.35); background:rgba(46,204,113,.05); }
+.cal-cell.day-neg { border-color:rgba(231,76,60,.35);  background:rgba(231,76,60,.05); }
+.cal-date {
+  font-size:13px; font-weight:700; color:var(--text2); margin-bottom:6px;
+}
+.cal-trades-count {
+  font-size:10px; color:var(--text3); margin-bottom:4px;
+}
+.cal-pnl {
+  font-family:'Space Mono',monospace;
+  font-size:13px;
+  font-weight:700;
+  line-height:1.2;
+}
+.cal-pnl.pos { color:var(--green); }
+.cal-pnl.neg { color:var(--red); }
+.cal-today { box-shadow:0 0 0 2px var(--accent); }
+
+/* Day detail strip (shown below calendar when clicking a day) */
+.cal-day-detail {
+  background:var(--card2);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  padding:16px 20px;
+  margin-bottom:20px;
+  display:none;
+}
+.cal-day-detail.open { display:block; }
+.cal-day-detail-title {
+  font-size:13px; font-weight:700; margin-bottom:12px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+
+/* ── MULTI-ACCOUNT CHECKBOX ── */
+.acc-check-card {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius2);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.acc-check-card:hover { border-color: var(--accent); }
+.acc-check-card.selected {
+  border-color: var(--accent);
+  background: rgba(79,142,247,.1);
+}
+.acc-check-card input[type=checkbox] { display:none; }
+.acc-check-mark {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border2);
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  transition: all .15s;
+}
+.acc-check-card.selected .acc-check-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.acc-check-info { flex: 1; min-width: 0; }
+.acc-check-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.acc-check-sub  { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
 /* ── RESPONSIVE ── */
 @media (max-width: 700px) {
   nav { padding: 0 12px; overflow-x: auto; }
@@ -749,24 +856,43 @@ tbody td {
     &nbsp;|&nbsp;
     <span id="live-date">--</span>
     &nbsp;|&nbsp;
-    <span style="color:var(--accent)">AUTO-SAVE ON</span>
+    <span style="color:var(--accent)" data-i18n="autosave">AUTO-SAVE ON</span>
+    &nbsp;|&nbsp;
+    <button id="cloud-btn" onclick="openCloudModal()" style="background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:5px;transition:border-color .2s;" title="Cloud Sync" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+      <span id="cloud-status-icon">☁️</span>
+      <span id="cloud-status-label">Cloud</span>
+    </button>
+    &nbsp;|&nbsp;
+    <button id="lang-btn" onclick="toggleLang()" style="background:var(--card);border:1px solid var(--border2);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:5px;transition:border-color .2s;" title="Switch language" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+      <span id="lang-flag" style="font-size:18px;">🇬🇧</span>
+      <span id="lang-label" style="font-size:11px;letter-spacing:.5px;">EN</span>
+    </button>
   </div>
 </header>
 
 <!-- NAV -->
 <nav>
   <button class="tab-btn active" onclick="switchTab('accounts')">
-    <span class="tab-icon">🏦</span> Comptes
+    <span class="tab-icon">🏦</span> <span data-i18n="tab_accounts">Comptes</span>
   </button>
   <button class="tab-btn" onclick="switchTab('journal')">
-    <span class="tab-icon">📋</span> Journal
+    <span class="tab-icon">📋</span> <span data-i18n="tab_journal">Journal</span>
   </button>
   <button class="tab-btn" onclick="switchTab('dashboard')">
-    <span class="tab-icon">📊</span> Dashboard
+    <span class="tab-icon">📊</span> <span data-i18n="tab_dashboard">Dashboard</span>
   </button>
   <button class="tab-btn" onclick="switchTab('weekly')">
-    <span class="tab-icon">📅</span> Rapport Hebdo
+    <span class="tab-icon">📅</span> <span data-i18n="tab_weekly">Rapport Hebdo</span>
   </button>
+  <!-- GLOBAL TYPE FILTER -->
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:8px 0;">
+    <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);" data-i18n="vue_label">Vue :</div>
+    <div style="display:flex;gap:3px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:3px;">
+      <button id="filter-all-btn"   onclick="setGlobalTypeFilter('all')"        class="btn btn-primary  btn-sm" style="padding:4px 10px;font-size:11px;" data-i18n="filter_all">Tous</button>
+      <button id="filter-eval-btn"  onclick="setGlobalTypeFilter('evaluation')" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:11px;" data-i18n="filter_eval">Évaluation</button>
+      <button id="filter-funded-btn" onclick="setGlobalTypeFilter('funded')"    class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:11px;" data-i18n="filter_funded">Funded</button>
+    </div>
+  </div>
 </nav>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -774,8 +900,8 @@ tbody td {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="tab-accounts" class="tab-content active">
   <div class="section-header">
-    <div class="section-title">Gestion des <span>Comptes</span></div>
-    <button class="btn btn-primary" onclick="openAccountModal()">＋ Nouveau Compte</button>
+    <div class="section-title"><span data-i18n="accounts_title">Gestion des</span> <span data-i18n="accounts_span">Comptes</span></div>
+    <button class="btn btn-primary" onclick="openAccountModal()" data-i18n="new_account">＋ Nouveau Compte</button>
   </div>
 
   <div id="accounts-grid" class="accounts-grid">
@@ -785,21 +911,91 @@ tbody td {
     </div>
   </div>
 
-  <div class="section-title mb-16" style="font-size:16px;">Liste <span>Complète</span></div>
+  <div class="section-title mb-16" style="font-size:16px;"><span data-i18n="accounts_list" style="color: var(--text);">Liste</span> <span data-i18n="accounts_list_span">Complète</span></div>
   <div class="table-wrap">
     <table id="accounts-table">
       <thead>
         <tr>
-          <th>Compte</th><th>Taille</th><th>Objectif $</th><th>DD Max $</th>
+          <th data-i18n="th_account">Compte</th><th data-i18n="th_size">Taille</th><th data-i18n="th_objective">Objectif $</th><th data-i18n="th_dd">DD Max $</th>
           <th>Daily Loss $</th><th>Consistency %</th><th>Statut</th>
-          <th>PNL Total $</th><th>Démarrage</th><th>DD Consommé $</th><th>DD Restant $</th>
-          <th>Actions</th>
+          <th data-i18n="th_pnl">PNL Total $</th><th data-i18n="th_start">Démarrage</th><th data-i18n="th_floor">Floor DD $</th>
+          <th data-i18n="th_consumed">DD Consommé $</th><th data-i18n="th_remaining">DD Restant $</th><th data-i18n="th_to_obj">Reste Obj. $</th>
+          <th data-i18n="th_actions">Actions</th>
         </tr>
       </thead>
       <tbody id="accounts-tbody">
-        <tr><td colspan="12" class="empty-state">Aucune donnée</td></tr>
+        <tr><td colspan="14" class="empty-state" data-i18n="no_data">Aucune donnée</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- DD HISTORY SIMULATOR -->
+  <div style="margin-top:28px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+      <div class="section-title" style="font-size:16px;">📉 <span data-i18n="dd_history_title_text">Historique DD</span> <span data-i18n="dd_history_span">Journalier</span></div>
+      <select class="filter-select" id="dd-sim-account" onchange="renderDDHistory()" style="min-width:200px;">
+        <option value="">— Choisir un compte —</option>
+      </select>
+    </div>
+
+    <!-- DD SUMMARY STRIP -->
+    <div id="dd-sim-strip" style="display:none;background:var(--bg3);border-radius:var(--radius2);padding:14px 18px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;border:1px solid var(--border);">
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_type_label">Type</div>
+        <div id="dd-sim-type" style="font-size:13px;font-weight:700;color:var(--accent);">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_eod_label">EOD DD</div>
+        <div id="dd-sim-eod" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_floor_label">Floor actuel</div>
+        <div id="dd-sim-floor" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;color:var(--text2);">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_balance_label">Balance actuelle</div>
+        <div id="dd-sim-balance" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_consumed_label">DD Consommé</div>
+        <div id="dd-sim-consumed" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;color:var(--red);">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_remaining_label">DD Restant</div>
+        <div id="dd-sim-left" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;color:var(--green);">—</div>
+      </div>
+      <div style="width:1px;background:var(--border);"></div>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;" data-i18n="dd_to_obj_label">Reste Objectif</div>
+        <div id="dd-sim-obj" style="font-size:13px;font-weight:700;font-family:'Space Mono',monospace;color:var(--gold);">—</div>
+      </div>
+    </div>
+
+    <!-- DD DAY BY DAY TABLE -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="th_date">Date</th>
+            <th data-i18n="th_pnl_jour">PnL Jour $</th>
+            <th data-i18n="balance_label">Balance $</th>
+            <th data-i18n="th_highwater">High-Water $</th>
+            <th data-i18n="th_floor">Floor DD $</th>
+            <th data-i18n="th_consumed">DD Consommé $</th>
+            <th data-i18n="th_remaining">DD Restant $</th>
+            <th data-i18n="th_dd_status">Statut DD</th>
+          </tr>
+        </thead>
+        <tbody id="dd-history-tbody">
+          <tr><td colspan="8" class="empty-state" data-i18n="select_account_dd">Sélectionnez un compte pour voir l'historique DD</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -808,37 +1004,54 @@ tbody td {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="tab-journal" class="tab-content">
   <div class="section-header">
-    <div class="section-title">Trading <span>Journal</span></div>
-    <button class="btn btn-primary" onclick="openTradeModal()">＋ Nouveau Trade</button>
+    <div class="section-title"><span data-i18n="journal_title">Trading</span> <span data-i18n="journal_span">Journal</span></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-secondary btn-sm" onclick="openModal('pwd-change-modal')" title="Changer le mot de passe">⚙️</button>
+      <button class="btn btn-secondary" onclick="openExportModal()" title="Exporter en PDF" data-i18n="export_pdf">📄 Exporter PDF</button>
+      <button class="btn btn-primary" onclick="requireJournalPwd('openTradeModal')" data-i18n="new_trade">＋ Nouveau Trade</button>
+    </div>
   </div>
 
   <div class="filter-bar">
     <select class="filter-select" id="journal-filter-account" onchange="renderJournal()">
-      <option value="">Tous les comptes</option>
+      <option value="" data-i18n="all_accounts">Tous les comptes</option>
     </select>
     <select class="filter-select" id="journal-filter-status" onchange="renderJournal()">
-      <option value="">Tous statuts</option>
+      <option value="" data-i18n="all_status">Tous statuts</option>
       <option>WIN</option><option>LOSS</option><option>BE</option>
     </select>
     <input type="month" class="form-control" id="journal-filter-month"
       style="max-width:160px;" onchange="renderJournal()">
+    <!-- VIEW TOGGLE -->
+    <div style="display:flex;gap:4px;margin-left:auto;">
+      <button id="view-grid-btn" class="btn btn-primary btn-sm" onclick="setJournalView('grid')" title="Vue calendrier" data-i18n="view_grid">⊞ Grille</button>
+      <button id="view-list-btn" class="btn btn-secondary btn-sm" onclick="setJournalView('list')" title="Vue liste" data-i18n="view_list">☰ Liste</button>
+    </div>
   </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th><th>Compte</th><th>Propfirm</th><th>Bal. Init $</th>
-          <th>Instrument</th><th>Position</th><th>Contrats</th>
-          <th>Entrée</th><th>SL pts</th><th>TP pts</th><th>Sortie</th>
-          <th>PnL pts</th><th>PnL NET $</th><th>Statut</th><th>Bal. Finale $</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="journal-tbody">
-        <tr><td colspan="16" class="empty-state">Aucun trade enregistré</td></tr>
-      </tbody>
-    </table>
+  <!-- GRID VIEW (calendar) -->
+  <div id="journal-grid-view">
+    <div id="journal-calendar"></div>
+  </div>
+
+  <!-- LIST VIEW (table) -->
+  <div id="journal-list-view" style="display:none;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="th_date">Date</th><th data-i18n="th_account">Compte</th><th data-i18n="th_propfirm">Propfirm</th><th data-i18n="th_balance_init">Bal. Init $</th>
+            <th data-i18n="th_instrument">Instrument</th><th data-i18n="th_position">Position</th><th data-i18n="th_contracts">Contrats</th>
+            <th data-i18n="th_entry">Entrée</th><th data-i18n="th_sl">SL pts</th><th data-i18n="th_tp">TP pts</th><th data-i18n="th_exit">Sortie</th>
+            <th data-i18n="th_pnl_pts">PnL pts</th><th data-i18n="th_pnl_net">PnL NET $</th><th data-i18n="th_status">Statut</th><th data-i18n="th_balance_final">Bal. Finale $</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="journal-tbody">
+          <tr><td colspan="16" class="empty-state" data-i18n="no_trades">Aucun trade enregistré</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -847,82 +1060,82 @@ tbody td {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="tab-dashboard" class="tab-content">
   <div class="section-header">
-    <div class="section-title">Trading <span>Dashboard</span></div>
+    <div class="section-title"><span data-i18n="dashboard_title">Trading</span> <span data-i18n="dashboard_span">Dashboard</span></div>
     <div style="display:flex;gap:10px;align-items:center;">
       <select class="filter-select" id="dash-account" onchange="renderDashboard()">
-        <option value="">Sélectionner un compte…</option>
+        <option value="" data-i18n="select_account_prompt">Sélectionner un compte…</option>
       </select>
-      <button class="btn btn-secondary" onclick="openShareModal()" title="Partager ce compte en lecture seule">
-        🔗 Partager
+      <button class="btn btn-secondary" onclick="openShareModal()" id="share-dash-btn">
+        🔗 <span data-i18n="share_btn_short">Partager</span>
       </button>
     </div>
   </div>
 
   <!-- KPI CARDS -->
   <!-- PERFORMANCE GLOBALE -->
-  <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">PERFORMANCE GLOBALE</div>
+  <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;" data-i18n="perf_globale">PERFORMANCE GLOBALE</div>
   <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label">PNL total</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label" data-i18n="pnl_total_label">PNL total</span></div>
       <div class="stat-value" id="d-pnl-total">—</div>
-      <div class="stat-sub">depuis le début</div>
+      <div class="stat-sub" data-i18n="pnl_since">depuis le début</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label">PNL mensuel</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label" data-i18n="pnl_monthly_label">PNL mensuel</span></div>
       <div class="stat-value" id="d-pnl-month">—</div>
       <div class="stat-sub" id="d-month-label">ce mois</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label">PNL hebdo</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label" data-i18n="pnl_weekly_label">PNL hebdo</span></div>
       <div class="stat-value" id="d-pnl-week">—</div>
-      <div class="stat-sub">semaine en cours</div>
+      <div class="stat-sub" data-i18n="pnl_weekly_sub">semaine en cours</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">☀️</span><span class="stat-label">PNL du jour</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">☀️</span><span class="stat-label" data-i18n="pnl_daily_label">PNL du jour</span></div>
       <div class="stat-value" id="d-pnl-day">—</div>
-      <div class="stat-sub">aujourd'hui</div>
+      <div class="stat-sub" data-i18n="pnl_daily_sub">aujourd'hui</div>
     </div>
   </div>
 
   <!-- STATISTIQUES -->
-  <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">STATISTIQUES</div>
+  <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;" data-i18n="statistiques">STATISTIQUES</div>
   <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">🎯</span><span class="stat-label">Win rate</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">🎯</span><span class="stat-label" data-i18n="winrate_label">Win rate</span></div>
       <div class="stat-value" id="d-winrate">—</div>
       <div class="stat-sub" id="d-winrate-sub">sur 0 trades</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label">Avg win</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label" data-i18n="avgwin_label">Avg win</span></div>
       <div class="stat-value pos" id="d-avgwin">—</div>
-      <div class="stat-sub">par trade gagnant</div>
+      <div class="stat-sub" data-i18n="avgwin_sub">par trade gagnant</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">↘</span><span class="stat-label">Avg loss</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">↘</span><span class="stat-label" data-i18n="avgloss_label">Avg loss</span></div>
       <div class="stat-value neg" id="d-avgloss">—</div>
-      <div class="stat-sub">par trade perdant</div>
+      <div class="stat-sub" data-i18n="avgloss_sub">par trade perdant</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">📋</span><span class="stat-label">Total trades</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">📋</span><span class="stat-label" data-i18n="total_trades_label">Total trades</span></div>
       <div class="stat-value" id="d-trades">—</div>
-      <div class="stat-sub">toutes positions</div>
+      <div class="stat-sub" data-i18n="total_trades_sub">toutes positions</div>
     </div>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">🏆</span><span class="stat-label">Meilleur jour</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">🏆</span><span class="stat-label" data-i18n="best_day_label">Meilleur jour</span></div>
       <div class="stat-value pos" id="d-best">—</div>
       <div class="stat-sub" id="d-best-date">—</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon-row"><span class="stat-icon">⊘</span><span class="stat-label">Pire jour</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">⊘</span><span class="stat-label" data-i18n="worst_day_label">Pire jour</span></div>
       <div class="stat-value neg" id="d-worst">—</div>
       <div class="stat-sub" id="d-worst-date">—</div>
     </div>
     <div class="stat-card" style="grid-column:span 2;">
-      <div class="stat-icon-row"><span class="stat-icon">📆</span><span class="stat-label">Jours tradés</span></div>
+      <div class="stat-icon-row"><span class="stat-icon">📆</span><span class="stat-label" data-i18n="trade_days_label">Jours tradés</span></div>
       <div class="stat-value neu" id="d-trade-days">—</div>
-      <div class="stat-sub" id="d-trade-days-sub">jours distincts avec au moins 1 trade</div>
+      <div class="stat-sub" id="d-trade-days-sub" data-i18n="trade_days_sub">jours distincts avec au moins 1 trade</div>
     </div>
   </div>
   <!-- hidden refs kept for JS compat -->
@@ -932,28 +1145,31 @@ tbody td {
   <!-- EQUITY CURVE -->
   <div class="chart-card mb-24">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text);">
-        <span style="opacity:.6;">📈</span> Equity curve
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text);">
+          <span style="opacity:.6;">📈</span> <span data-i18n="equity_curve">Equity curve</span>
+        </div>
+        <div id="chart-pnl-total" style="font-family:'Inter',sans-serif;font-size:18px;font-weight:800;letter-spacing:-0.5px;">—</div>
       </div>
-      <div style="font-size:11px;color:var(--text3);font-weight:500;">PNL cumulé ($)</div>
+      <div style="font-size:11px;color:var(--text3);font-weight:500;" data-i18n="pnl_cumule">PNL cumulé ($)</div>
     </div>
-    <div class="chart-wrap">
+    <div class="chart-wrap" style="height:300px;">
       <canvas id="equity-chart"></canvas>
     </div>
   </div>
 
   <!-- SUMMARY TABLE -->
-  <div class="section-title mb-16" style="font-size:16px;">Résumé <span>Comptes</span></div>
+  <div class="section-title mb-16" style="font-size:16px;"><span data-i18n="summary_title">Résumé</span> <span data-i18n="summary_span">Comptes</span></div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Compte</th><th>Propfirm</th><th>Taille</th><th>PnL Total $</th>
-          <th>Objectif %</th><th>DD Consommé $</th><th>DD Restant $</th>
+          <th data-i18n="th_account">Compte</th><th data-i18n="th_propfirm">Propfirm</th><th data-i18n="th_size">Taille</th><th data-i18n="th_pnl">PnL Total $</th>
+          <th data-i18n="th_obj_pct">Objectif %</th><th data-i18n="th_floor">Floor DD $</th><th data-i18n="th_consumed">DD Consommé $</th><th data-i18n="th_remaining">DD Restant $</th>
         </tr>
       </thead>
       <tbody id="dash-summary-tbody">
-        <tr><td colspan="7" class="empty-state">Aucune donnée</td></tr>
+        <tr><td colspan="8" class="empty-state" data-i18n="no_data">Aucune donnée</td></tr>
       </tbody>
     </table>
   </div>
@@ -964,16 +1180,16 @@ tbody td {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="tab-weekly" class="tab-content">
   <div class="section-header">
-    <div class="section-title">Rapport <span>Hebdomadaire</span></div>
+    <div class="section-title"><span data-i18n="weekly_title">Rapport</span> <span data-i18n="weekly_span">Hebdomadaire</span></div>
   </div>
 
   <div class="filter-bar">
     <select class="filter-select" id="weekly-account" onchange="renderWeekly()">
-      <option value="">Tous les comptes</option>
+      <option value="" data-i18n="all_accounts">Tous les comptes</option>
     </select>
     <div class="week-nav">
       <button onclick="changeWeek(-1)">◀</button>
-      <div class="week-label" id="week-label">Semaine actuelle</div>
+      <div class="week-label" id="week-label" data-i18n="current_week">Semaine actuelle</div>
       <button onclick="changeWeek(1)">▶</button>
     </div>
   </div>
@@ -981,44 +1197,44 @@ tbody td {
   <!-- WEEKLY SUMMARY STRIP -->
   <div class="summary-strip" id="weekly-strip">
     <div class="summary-item">
-      <div class="summary-item-label">Total Trades</div>
+      <div class="summary-item-label" data-i18n="ws_total">Total Trades</div>
       <div class="summary-item-val" id="ws-total">—</div>
     </div>
     <div class="sep"></div>
     <div class="summary-item">
-      <div class="summary-item-label">Gagnants</div>
+      <div class="summary-item-label" data-i18n="ws_wins">Gagnants</div>
       <div class="summary-item-val pos" id="ws-wins">—</div>
     </div>
     <div class="sep"></div>
     <div class="summary-item">
-      <div class="summary-item-label">Perdants</div>
+      <div class="summary-item-label" data-i18n="ws_losses">Perdants</div>
       <div class="summary-item-val neg" id="ws-losses">—</div>
     </div>
     <div class="sep"></div>
     <div class="summary-item">
-      <div class="summary-item-label">Win Rate</div>
+      <div class="summary-item-label" data-i18n="ws_wr">Win Rate</div>
       <div class="summary-item-val" id="ws-wr">—</div>
     </div>
     <div class="sep"></div>
     <div class="summary-item">
-      <div class="summary-item-label">PnL Net Semaine</div>
+      <div class="summary-item-label" data-i18n="ws_pnl">PnL Net Semaine</div>
       <div class="summary-item-val" id="ws-pnl">—</div>
     </div>
     <div class="sep"></div>
     <div class="summary-item">
-      <div class="summary-item-label">Propfirm</div>
+      <div class="summary-item-label" data-i18n="ws_firm">Propfirm</div>
       <div class="summary-item-val text-muted" id="ws-firm" style="font-size:12px">—</div>
     </div>
   </div>
 
   <!-- PERFORMANCE BY DAY -->
-  <div class="section-title mb-16" style="font-size:16px;">Performance par <span>Jour</span></div>
+  <div class="section-title mb-16" style="font-size:16px;"><span data-i18n="perf_jour_title">Performance par</span> <span data-i18n="perf_jour_span">Jour</span></div>
   <div class="table-wrap perf-day-card">
     <table>
       <thead>
         <tr>
-          <th>Jour</th><th>Date</th><th>Trades</th><th>Wins</th><th>Loss</th><th>BE</th>
-          <th>Win %</th><th>Loss %</th><th>PnL Net $</th>
+          <th data-i18n="th_day">Jour</th><th data-i18n="th_date">Date</th><th data-i18n="th_trades">Trades</th><th data-i18n="th_wins">Wins</th><th data-i18n="th_losses">Loss</th><th data-i18n="th_be">BE</th>
+          <th data-i18n="th_winpct">Win %</th><th data-i18n="th_losspct">Loss %</th><th data-i18n="th_pnlnet">PnL Net $</th>
         </tr>
       </thead>
       <tbody id="weekly-days-tbody">
@@ -1028,7 +1244,7 @@ tbody td {
   </div>
 
   <!-- WEEKLY TRADES LIST -->
-  <div class="section-title mt-24 mb-16" style="font-size:16px;">Trades de la <span>Semaine</span></div>
+  <div class="section-title mt-24 mb-16" style="font-size:16px;"><span data-i18n="trades_semaine_title">Trades de la</span> <span data-i18n="trades_semaine_span">Semaine</span></div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -1038,9 +1254,111 @@ tbody td {
         </tr>
       </thead>
       <tbody id="weekly-trades-tbody">
-        <tr><td colspan="8" class="empty-state">Aucun trade cette semaine</td></tr>
+        <tr><td colspan="8" class="empty-state" data-i18n="no_trades_week">Aucun trade cette semaine</td></tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL — EXPORT PDF -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title" data-i18n="export_title">📄 Exporter Journal en PDF</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6;">
+      Sélectionnez le compte et le mois à exporter. Le PDF contiendra tous les trades du mois ainsi qu'un résumé de performance.
+    </p>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label class="form-label" data-i18n="th_account">Compte</label>
+      <select class="form-control" id="export-account">
+        <option value="">— Choisir un compte —</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label class="form-label" data-i18n="export_period">Période</label>
+      <select class="form-control" id="export-period-type" onchange="toggleExportPeriod()">
+        <option value="month" data-i18n="by_month">Par mois</option>
+        <option value="week" data-i18n="by_week">Par semaine</option>
+      </select>
+    </div>
+
+    <div id="export-month-group" class="form-group" style="margin-bottom:20px;">
+      <label class="form-label" data-i18n="month_label">Mois</label>
+      <input class="form-control" id="export-month" type="month" onchange="onExportMonthChange()">
+    </div>
+
+    <div id="export-week-group" class="form-group" style="margin-bottom:20px;display:none;">
+      <label class="form-label" data-i18n="week_ref_label">Mois de référence</label>
+      <input class="form-control" id="export-week-month" type="month" onchange="populateWeekSelect()" style="margin-bottom:10px;">
+      <label class="form-label" style="margin-top:8px;" data-i18n="week_label">Semaine</label>
+      <select class="form-control" id="export-week-select" onchange="updateExportPreview()">
+        <option value="" data-i18n="choose_week">— Choisir une semaine —</option>
+      </select>
+    </div>
+
+    <!-- Preview count -->
+    <div id="export-preview" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius2);padding:12px 14px;margin-bottom:20px;font-size:12px;color:var(--text2);display:none;">
+      <span id="export-preview-txt"></span>
+    </div>
+
+    <div id="export-error" style="font-size:12px;color:var(--red);min-height:18px;margin-bottom:10px;"></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="exportJournalPDF()" data-i18n="generate_pdf">📥 Générer PDF</button>
+      <button class="btn btn-secondary" onclick="closeModal('export-modal')" data-i18n="cancel_btn">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL — MOT DE PASSE JOURNAL -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="pwd-modal">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-title" data-i18n="pwd_title">🔐 Accès Journal</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.6;">
+      Entrez le mot de passe pour modifier le journal de trade.
+    </p>
+    <div class="form-group" style="margin-bottom:6px;">
+      <label class="form-label" data-i18n="pwd_label">Mot de passe</label>
+      <input class="form-control" id="pwd-input" type="password" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter') checkJournalPwd()">
+    </div>
+    <div id="pwd-error" style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:12px;"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="checkJournalPwd()" data-i18n="pwd_confirm_btn">✅ Confirmer</button>
+      <button class="btn btn-secondary" onclick="closeModal('pwd-modal')" data-i18n="cancel_btn">Annuler</button>
+    </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);">
+      💡 Pour changer le mot de passe : cliquez sur ⚙️ dans le header du journal.
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — CHANGER MOT DE PASSE -->
+<div class="modal-overlay" id="pwd-change-modal">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-title" data-i18n="pwd_change_title">⚙️ Changer le mot de passe</div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label" data-i18n="pwd_old_label">Mot de passe actuel</label>
+      <input class="form-control" id="pwd-old" type="password" placeholder="••••••••">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label" data-i18n="pwd_new_label">Nouveau mot de passe</label>
+      <input class="form-control" id="pwd-new" type="password" placeholder="••••••••">
+    </div>
+    <div class="form-group" style="margin-bottom:6px;">
+      <label class="form-label" data-i18n="pwd_confirm_label">Confirmer le nouveau</label>
+      <input class="form-control" id="pwd-confirm" type="password" placeholder="••••••••">
+    </div>
+    <div id="pwd-change-error" style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:12px;"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="changeJournalPwd()" data-i18n="save_btn">💾 Sauvegarder</button>
+      <button class="btn btn-secondary" onclick="closeModal('pwd-change-modal')" data-i18n="cancel_btn">Annuler</button>
+    </div>
   </div>
 </div>
 
@@ -1049,54 +1367,68 @@ tbody td {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="account-modal">
   <div class="modal">
-    <div class="modal-title">🏦 <span id="acc-modal-title">Nouveau Compte</span></div>
+    <div class="modal-title">🏦 <span id="acc-modal-title" data-i18n="acc_modal_new">Nouveau Compte</span></div>
     <input type="hidden" id="acc-edit-id">
     <div class="form-grid">
       <div class="form-group">
-        <label class="form-label">Nom du Compte</label>
+        <label class="form-label" data-i18n="acc_name_label">Nom du Compte</label>
         <input class="form-control" id="acc-name" placeholder="Ex: Apex 50K #1">
       </div>
       <div class="form-group">
-        <label class="form-label">Propfirm</label>
+        <label class="form-label" data-i18n="acc_firm_label">Propfirm</label>
         <input class="form-control" id="acc-firm" placeholder="Ex: Apex, FTMO, MFF…">
       </div>
       <div class="form-group">
-        <label class="form-label">Taille du Compte $</label>
+        <label class="form-label" data-i18n="acc_size_label">Taille du Compte $</label>
         <input class="form-control" id="acc-size" type="number" placeholder="50000">
       </div>
       <div class="form-group">
-        <label class="form-label">Objectif $</label>
+        <label class="form-label" data-i18n="acc_obj_label">Objectif $</label>
         <input class="form-control" id="acc-objective" type="number" placeholder="3000">
       </div>
       <div class="form-group">
-        <label class="form-label">Drawdown Max $</label>
-        <input class="form-control" id="acc-dd" type="number" placeholder="2500">
+        <label class="form-label" data-i18n="acc_dd_label">Drawdown Max $ (EOD)</label>
+        <input class="form-control" id="acc-dd" type="number" placeholder="2000">
       </div>
       <div class="form-group">
-        <label class="form-label">Daily Loss $</label>
-        <input class="form-control" id="acc-daily" type="number" placeholder="1000">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Consistency %</label>
-        <input class="form-control" id="acc-consistency" type="number" placeholder="30">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Statut</label>
-        <select class="form-control" id="acc-status">
-          <option>actif</option>
-          <option>passé</option>
-          <option>en attente</option>
-          <option>échoué</option>
+        <label class="form-label" data-i18n="acc_dd_type_label">Type de DD</label>
+        <select class="form-control" id="acc-dd-type">
+          <option value="trailing" data-i18n="dd_trailing">EOD Trailing</option>
+          <option value="static" data-i18n="dd_static">Statique</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Date de Démarrage</label>
+        <label class="form-label" data-i18n="acc_daily_label">Daily Loss $</label>
+        <input class="form-control" id="acc-daily" type="number" placeholder="1000">
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="acc_consist_label">Consistency %</label>
+        <input class="form-control" id="acc-consistency" type="number" placeholder="30">
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="acc_type_label">Type de compte</label>
+        <select class="form-control" id="acc-type">
+          <option value="evaluation" data-i18n="acc_evaluation">Évaluation</option>
+          <option value="funded" data-i18n="acc_funded">Funded</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="acc_status_label">Statut</label>
+        <select class="form-control" id="acc-status">
+          <option data-i18n="status_actif">actif</option>
+          <option data-i18n="status_passe">passé</option>
+          <option data-i18n="status_attente">en attente</option>
+          <option data-i18n="status_echoue">échoué</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="acc_start_label">Date de Démarrage</label>
         <input class="form-control" id="acc-start" type="date">
       </div>
     </div>
     <div class="form-actions">
-      <button class="btn btn-primary" onclick="saveAccount()">💾 Sauvegarder</button>
-      <button class="btn btn-secondary" onclick="closeModal('account-modal')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveAccount()" data-i18n="save_btn">💾 Sauvegarder</button>
+      <button class="btn btn-secondary" onclick="closeModal('account-modal')" data-i18n="cancel_btn">Annuler</button>
     </div>
   </div>
 </div>
@@ -1105,63 +1437,87 @@ tbody td {
 <!-- MODAL — TRADE -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="trade-modal">
-  <div class="modal">
-    <div class="modal-title">📋 <span id="trade-modal-title">Nouveau Trade</span></div>
+  <div class="modal" style="max-width:960px;">
+    <div class="modal-title">📋 <span id="trade-modal-title" data-i18n="trade_modal_new">Nouveau Trade</span></div>
     <input type="hidden" id="trade-edit-id">
+
+    <!-- MODE TOGGLE (only for new trades) -->
+    <div id="trade-mode-toggle" style="display:flex;gap:8px;margin-bottom:18px;">
+      <button id="mode-single-btn" class="btn btn-primary btn-sm" onclick="setTradeMode('single')" data-i18n="mode_single">👤 Compte unique</button>
+      <button id="mode-multi-btn"  class="btn btn-secondary btn-sm" onclick="setTradeMode('multi')" data-i18n="mode_multi">👥 Multi-comptes (copieur)</button>
+    </div>
+
+    <!-- SINGLE ACCOUNT -->
+    <div id="trade-single-account">
+      <div class="form-grid" style="grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">
+        <div class="form-group">
+          <label class="form-label">Compte</label>
+          <select class="form-control" id="t-account" onchange="onTradeAccountChange()">
+            <option value="">-- Choisir --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Propfirm</label>
+          <input class="form-control" id="t-firm" placeholder="Auto…" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Balance Initiale $</label>
+          <input class="form-control" id="t-balance-init" type="number" placeholder="50000" oninput="calcTrade()">
+        </div>
+      </div>
+    </div>
+
+    <!-- MULTI ACCOUNTS -->
+    <div id="trade-multi-accounts" style="display:none;margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);margin-bottom:8px;">
+        Sélectionner les comptes à copier
+      </div>
+      <div id="multi-account-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:200px;overflow-y:auto;padding:4px 2px;"></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text3);">
+        💡 La balance initiale de chaque compte sera auto-calculée depuis le dernier trade.
+      </div>
+    </div>
+
     <div class="form-grid">
       <div class="form-group">
-        <label class="form-label">Date</label>
+        <label class="form-label" data-i18n="date_label">Date</label>
         <input class="form-control" id="t-date" type="date">
       </div>
       <div class="form-group">
-        <label class="form-label">Compte</label>
-        <select class="form-control" id="t-account" onchange="onTradeAccountChange()">
-          <option value="">-- Choisir --</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Propfirm</label>
-        <input class="form-control" id="t-firm" placeholder="Auto…" readonly>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Balance Initiale $</label>
-        <input class="form-control" id="t-balance-init" type="number" placeholder="50000" oninput="calcTrade()">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Instrument</label>
-        <select class="form-control" id="t-instrument">
+        <label class="form-label" data-i18n="instrument_label">Instrument</label>
+        <select class="form-control" id="t-instrument" onchange="calcTrade()">
           <option>MES</option><option>MNQ</option><option>MYM</option>
           <option>MGC</option><option>M6E</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Position</label>
-        <select class="form-control" id="t-side">
+        <label class="form-label" data-i18n="position_label">Position</label>
+        <select class="form-control" id="t-side" onchange="calcTrade()">
           <option>BUY</option><option>SELL</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Contrats (qty)</label>
+        <label class="form-label" data-i18n="contracts_label">Contrats (qty)</label>
         <input class="form-control" id="t-qty" type="number" min="1" value="1" oninput="calcTrade()">
       </div>
       <div class="form-group">
-        <label class="form-label">Entrée (prix)</label>
+        <label class="form-label" data-i18n="entry_label">Entrée (prix)</label>
         <input class="form-control" id="t-entry" type="number" step="0.01" oninput="calcTrade()">
       </div>
       <div class="form-group">
-        <label class="form-label">Stop Loss (pts)</label>
+        <label class="form-label" data-i18n="sl_label">Stop Loss (pts)</label>
         <input class="form-control" id="t-sl" type="number" step="0.25" oninput="calcTrade()">
       </div>
       <div class="form-group">
-        <label class="form-label">Take Profit (pts)</label>
+        <label class="form-label" data-i18n="tp_label">Take Profit (pts)</label>
         <input class="form-control" id="t-tp" type="number" step="0.25" oninput="calcTrade()">
       </div>
       <div class="form-group">
-        <label class="form-label">Sortie (prix)</label>
+        <label class="form-label" data-i18n="exit_label">Sortie (prix)</label>
         <input class="form-control" id="t-exit" type="number" step="0.01" oninput="calcTrade()">
       </div>
       <div class="form-group">
-        <label class="form-label">Statut</label>
+        <label class="form-label" data-i18n="acc_status_label">Statut</label>
         <select class="form-control" id="t-status">
           <option>WIN</option><option>LOSS</option><option>BE</option>
         </select>
@@ -1189,8 +1545,8 @@ tbody td {
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-primary" onclick="saveTrade()">💾 Sauvegarder</button>
-      <button class="btn btn-secondary" onclick="closeModal('trade-modal')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveTrade()" data-i18n="save_btn">💾 Sauvegarder</button>
+      <button class="btn btn-secondary" onclick="closeModal('trade-modal')" data-i18n="cancel_btn">Annuler</button>
     </div>
   </div>
 </div>
@@ -1218,11 +1574,82 @@ let accounts = [];
 let trades   = [];
 let equityChart = null;
 let currentWeekOffset = 0;
+let currentLang = localStorage.getItem('qh_lang') || 'fr';
 
 /* ─── STORAGE ─── */
+async function saveCloud() {
+  if (!supabaseClient || !userSession) return;
+  try {
+    const userId = userSession.user.id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    // Sync accounts
+    await supabaseClient.from('accounts').delete().eq('user_id', userId);
+    if (accounts.length > 0) {
+      const toInsert = accounts.map(a => {
+        const item = {
+          user_id: userId,
+          name: a.name,
+          firm: a.firm || '',
+          size: a.size || 0,
+          dd: a.dd || 0,
+          dd_type: a.ddType || 'trailing',
+          daily_loss: a.daily || 0,
+          consistency: a.consistency || 0,
+          type: a.accountType || 'evaluation',
+          status: a.status || 'actif',
+          start_date: a.start || null,
+          objective: a.objective || 0
+        };
+        if (a.id && uuidRegex.test(a.id)) {
+          item.id = a.id;
+        }
+        return item;
+      });
+      await supabaseClient.from('accounts').insert(toInsert);
+    }
+    
+    // Sync trades
+    await supabaseClient.from('trades').delete().eq('user_id', userId);
+    if (trades.length > 0) {
+      const toInsert = trades.map(t => {
+        const item = {
+          user_id: userId,
+          account: t.account,
+          date: t.date,
+          instrument: t.instrument,
+          side: t.side,
+          qty: t.qty,
+          entry: t.entry,
+          sl: t.sl,
+          tp: t.tp,
+          exit: t.exit,
+          pnl_pts: t.pnlPts,
+          pnl_net: t.pnlNet,
+          status: t.status,
+          firm: t.firm || '',
+          balance_init: t.balanceInit || 0,
+          balance_final: t.balanceFinal || 0
+        };
+        if (t.id && uuidRegex.test(t.id)) {
+          item.id = t.id;
+        }
+        return item;
+      });
+      await supabaseClient.from('trades').insert(toInsert);
+    }
+  } catch (err) {
+    console.error("Cloud save failed:", err);
+    showToast(currentLang === 'fr' ? "Erreur d'enregistrement Cloud" : "Cloud save error", 'error');
+  }
+}
+
 function save() {
   localStorage.setItem('qh_accounts', JSON.stringify(accounts));
   localStorage.setItem('qh_trades',   JSON.stringify(trades));
+  if (supabaseClient && userSession) {
+    saveCloud();
+  }
 }
 
 function load() {
@@ -1234,10 +1661,29 @@ function load() {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 /* ─── CLOCK ─── */
+function formatLiveDate(date, lang) {
+  const daysFr = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  const daysEn = ['Sun.', 'Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.'];
+  const monthsFr = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  const monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  const day = date.getDate();
+  const year = date.getFullYear();
+  if (lang === 'fr') {
+    const wd = daysFr[date.getDay()];
+    const m = monthsFr[date.getMonth()].toLowerCase();
+    return `${wd} ${day} ${m} ${year}`;
+  } else {
+    const wd = daysEn[date.getDay()];
+    const m = monthsEn[date.getMonth()];
+    return `${wd} ${day} ${m} ${year}`;
+  }
+}
+
 function updateClock() {
   const now = new Date();
   document.getElementById('live-clock').textContent = now.toLocaleTimeString('fr-FR');
-  document.getElementById('live-date').textContent  = now.toLocaleDateString('fr-FR', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+  document.getElementById('live-date').textContent  = formatLiveDate(now, currentLang);
 }
 
 setInterval(updateClock, 1000);
@@ -1252,6 +1698,40 @@ function switchTab(name) {
 
   if (name === 'dashboard') renderDashboard();
   if (name === 'weekly')    renderWeekly();
+}
+
+/* ─── OPEN JOURNAL FOR ACCOUNT (click on card) ─── */
+function openAccountJournal(accName) {
+  // Switch to journal tab
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-journal').classList.add('active');
+  document.querySelectorAll('.tab-btn')[1].classList.add('active');
+
+  // Pre-filter journal to this account
+  const filterSel = document.getElementById('journal-filter-account');
+  if (filterSel) { filterSel.value = accName; renderJournal(); }
+
+  // Ask for password then open trade modal with account pre-selected
+  _pendingAction = '__openJournalTrade__';
+  _pendingArg    = accName;
+
+  if (_journalUnlocked) {
+    _openTradeForAccount(accName);
+    return;
+  }
+  document.getElementById('pwd-input').value = '';
+  document.getElementById('pwd-error').textContent = '';
+  openModal('pwd-modal');
+  setTimeout(() => document.getElementById('pwd-input').focus(), 100);
+}
+
+function _openTradeForAccount(accName) {
+  openTradeModal();
+  setTimeout(() => {
+    const accSel = document.getElementById('t-account');
+    if (accSel) { accSel.value = accName; onTradeAccountChange(); }
+  }, 50);
 }
 
 /* ─── TOAST ─── */
@@ -1284,31 +1764,175 @@ function getAccountPnl(accName) {
   return trades.filter(t => t.account === accName).reduce((s, t) => s + (t.pnlNet || 0), 0);
 }
 
-function getAccountDDConsumed(accName) {
-  let maxBalance = 0, pnl = 0, maxDD = 0;
+/*
+ * ─── TRAILING DD ENGINE ───────────────────────────────────────────
+ *
+ * Règle Trailing (Apex, TopStep, etc.) :
+ *   • DD Floor initial  = Taille - EOD_DD
+ *   • Chaque jour clôturé en POSITIF → le floor monte avec le highwater
+ *   • Chaque jour clôturé en NÉGATIF → le floor ne bouge pas (on consomme)
+ *   • Le floor ne descend JAMAIS
+ *   • DD consommé = floor actuel - balance actuelle  (si positif)
+ *   • DD restant  = (floor actuel + EOD_DD) - floor actuel = EOD_DD - DD consommé
+ *   • Pour atteindre l'objectif : objectif - PnL total
+ *
+ * Règle Statique (FTMO, MFF) :
+ *   • DD floor fixe = Taille - DD_Max
+ *   • DD consommé = max drawdown depuis le début
+ */
+function getTrailingDDDetails(accName) {
   const acc = accounts.find(a => a.name === accName);
-  if (!acc) return 0;
-  const sorted = trades.filter(t => t.account === accName).sort((a,b) => a.date.localeCompare(b.date));
-  sorted.forEach(t => {
-    pnl += t.pnlNet || 0;
-    if (pnl > maxBalance) maxBalance = pnl;
-    const dd = maxBalance - pnl;
-    if (dd > maxDD) maxDD = dd;
+  if (!acc) return { ddFloor: 0, ddConsumed: 0, ddLeft: 0, balance: acc ? acc.size : 0, toObjective: 0, dailyHistory: [] };
+
+  const size    = acc.size      || 0;
+  const eodDD   = acc.dd        || 0;
+  const objAmt  = acc.objective || 0;
+  const ddType  = acc.ddType    || 'trailing';
+
+  // Group trades by day, sorted
+  const accTrades = trades.filter(t => t.account === accName);
+  const dailyMap  = {};
+  accTrades.forEach(t => {
+    if (t.date) dailyMap[t.date] = (dailyMap[t.date] || 0) + (t.pnlNet || 0);
   });
-  return maxDD;
+  const days = Object.keys(dailyMap).sort();
+
+  let balance     = size;           // current balance
+  let hwBalance   = size;           // high-water mark
+  let ddFloor     = size - eodDD;   // trailing floor (never goes down)
+  const dailyHistory = [];
+
+  if (ddType === 'trailing') {
+    days.forEach(date => {
+      const dayPnl = dailyMap[date];
+      balance += dayPnl;
+
+      // High-water: track peak balance
+      if (balance > hwBalance) {
+        hwBalance = balance;
+        // Floor follows high-water mark
+        ddFloor = hwBalance - eodDD;
+        // Floor never goes below initial floor
+        if (ddFloor < size - eodDD) ddFloor = size - eodDD;
+      }
+
+      // DD consommé = distance entre balance actuelle et floor DD
+      // Si balance > floor → rien de consommé (on est au-dessus du floor)
+      // Si balance < floor → on a percé le floor → blown
+      // Règle correcte : DD consommé = perte depuis le high-water
+      const ddConsumedDay = Math.max(0, hwBalance - balance);
+      // DD restant = EOD_DD - DD consommé (ne peut pas être négatif)
+      const ddLeftDay = Math.max(0, eodDD - ddConsumedDay);
+
+      dailyHistory.push({
+        date,
+        pnl:        dayPnl,
+        balance,
+        hwBalance,
+        ddFloor,
+        ddConsumed: ddConsumedDay,
+        ddLeft:     ddLeftDay,
+      });
+    });
+  } else {
+    // Static DD
+    let maxDD = 0;
+    let peakBal = size;
+    days.forEach(date => {
+      const dayPnl = dailyMap[date];
+      balance += dayPnl;
+      if (balance > peakBal) peakBal = balance;
+      const dd = peakBal - balance;
+      if (dd > maxDD) maxDD = dd;
+      dailyHistory.push({
+        date,
+        pnl:       dayPnl,
+        balance,
+        hwBalance: peakBal,
+        ddFloor:   size - eodDD,
+        ddConsumed: maxDD,
+        ddLeft:    Math.max(0, eodDD - maxDD),
+      });
+    });
+  }
+
+  // Final state
+  const last        = dailyHistory[dailyHistory.length - 1];
+  const ddConsumed  = last ? last.ddConsumed : 0;
+  const ddLeft      = last ? last.ddLeft     : eodDD;
+  const finalFloor  = last ? last.ddFloor    : (size - eodDD);
+  const totalPnl    = balance - size;
+  const toObjective = Math.max(0, objAmt - totalPnl);
+
+  return {
+    ddFloor:      finalFloor,
+    ddConsumed,
+    ddLeft,
+    balance,
+    totalPnl,
+    toObjective,
+    eodDD,
+    size,
+    objAmt,
+    ddType,
+    dailyHistory,
+  };
 }
 
-/* ─── POPULATE SELECTS ─── */
+function getAccountDDConsumed(accName) {
+  return getTrailingDDDetails(accName).ddConsumed;
+}
+
+/* ─── GLOBAL ACCOUNT TYPE FILTER ─── */
+let globalTypeFilter = 'all'; // 'all' | 'evaluation' | 'funded'
+
+function setGlobalTypeFilter(type) {
+  globalTypeFilter = type;
+  // Update button styles
+  ['all','eval','funded'].forEach(k => {
+    const btn = document.getElementById(`filter-${k}-btn`);
+    if (!btn) return;
+    const match = (k === 'eval' ? 'evaluation' : k) === type || (k === 'all' && type === 'all');
+    btn.className = match ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+    btn.style.padding = '4px 10px';
+    btn.style.fontSize = '11px';
+  });
+  // Re-render everything
+  populateAccountSelects();
+  renderAccounts();
+  renderJournal();
+  renderDDHistory();
+  renderDashboard();
+  renderWeekly();
+}
+
+/* Returns accounts filtered by global type */
+function getFilteredAccounts() {
+  if (globalTypeFilter === 'all') return accounts;
+  return accounts.filter(a => (a.accountType || 'evaluation') === globalTypeFilter);
+}
+
+/* Returns account names filtered by global type */
+function getFilteredAccountNames() {
+  return getFilteredAccounts().map(a => a.name);
+}
+
+/* Returns trades filtered by global type */
+function getFilteredTrades() {
+  const names = getFilteredAccountNames();
+  return trades.filter(t => names.includes(t.account));
+}
 function populateAccountSelects() {
-  const names = accounts.map(a => a.name);
-  ['t-account', 'journal-filter-account', 'dash-account', 'weekly-account'].forEach(id => {
+  const names = getFilteredAccountNames();
+  ['t-account', 'journal-filter-account', 'dash-account', 'weekly-account', 'dd-sim-account', 'export-account'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const prev = sel.value;
-    const allOption = id.includes('filter') || id === 'dash-account' || id === 'weekly-account'
-      ? `<option value="">Tous les comptes</option>`
-      : `<option value="">-- Choisir --</option>`;
+    const allOption = id === 't-account'
+      ? `<option value="">-- Choisir --</option>`
+      : `<option value="">${t('all_accounts')}</option>`;
     sel.innerHTML = allOption + names.map(n => `<option ${n===prev?'selected':''}>${n}</option>`).join('');
+    if (prev && !names.includes(prev)) sel.value = '';
   });
 }
 
@@ -1328,6 +1952,8 @@ function openAccountModal(id = null) {
     document.getElementById('acc-consistency').value = a.consistency;
     document.getElementById('acc-status').value      = a.status;
     document.getElementById('acc-start').value       = a.start;
+    document.getElementById('acc-dd-type').value     = a.ddType || 'trailing';
+    document.getElementById('acc-type').value         = a.accountType || 'evaluation';
   } else {
     ['acc-name','acc-firm','acc-size','acc-objective','acc-dd','acc-daily','acc-consistency','acc-start']
       .forEach(id => document.getElementById(id).value = '');
@@ -1349,6 +1975,8 @@ function saveAccount() {
     size:        parseFloat(document.getElementById('acc-size').value) || 0,
     objective:   parseFloat(document.getElementById('acc-objective').value) || 0,
     dd:          parseFloat(document.getElementById('acc-dd').value) || 0,
+    ddType:      document.getElementById('acc-dd-type').value || 'trailing',
+    accountType: document.getElementById('acc-type').value || 'evaluation',
     daily:       parseFloat(document.getElementById('acc-daily').value) || 0,
     consistency: parseFloat(document.getElementById('acc-consistency').value) || 0,
     status:      document.getElementById('acc-status').value,
@@ -1362,16 +1990,109 @@ function saveAccount() {
   closeModal('account-modal');
   populateAccountSelects();
   renderAccounts();
+  renderDDHistory();
   showToast(`Compte "${name}" sauvegardé`);
 }
 
 function deleteAccount(id) {
-  if (!confirm('Supprimer ce compte ?')) return;
+  _pendingAction = '__deleteAccount__';
+  _pendingArg    = id;
+  if (_journalUnlocked) {
+    _doDeleteAccount(id);
+    return;
+  }
+  document.getElementById('pwd-input').value = '';
+  document.getElementById('pwd-error').textContent = '';
+  openModal('pwd-modal');
+  setTimeout(() => document.getElementById('pwd-input').focus(), 100);
+}
+
+function _doDeleteAccount(id) {
+  if (!confirm('Supprimer ce compte ? Tous les trades associés seront également supprimés.')) return;
+  const acc = accounts.find(a => a.id === id);
   accounts = accounts.filter(a => a.id !== id);
+  if (acc) {
+    trades = trades.filter(t => t.account !== acc.name);
+    ['dash-account','weekly-account','dd-sim-account','journal-filter-account'].forEach(selId => {
+      const el = document.getElementById(selId);
+      if (el && el.value === acc.name) el.value = '';
+    });
+  }
   save();
   populateAccountSelects();
   renderAccounts();
-  showToast('Compte supprimé');
+  renderDDHistory();
+  renderJournal();
+  renderDashboard();
+  renderWeekly();
+  showToast('Compte et trades associés supprimés');
+}
+
+/* ─── RENDER DD HISTORY ─── */
+function renderDDHistory() {
+  const accName = document.getElementById('dd-sim-account').value;
+  const tbody   = document.getElementById('dd-history-tbody');
+  const strip   = document.getElementById('dd-sim-strip');
+
+  if (!accName || !getFilteredAccountNames().includes(accName)) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${t('dd_sim_select_prompt')}</td></tr>`;
+    if (strip) strip.style.display = 'none';
+    return;
+  }
+
+  const acc = accounts.find(a => a.name === accName);
+  if (!acc) return;
+
+  const dd = getTrailingDDDetails(accName);
+  const isTrailing = (acc.ddType || 'trailing') === 'trailing';
+
+  // Update strip
+  if (strip) {
+    strip.style.display = 'flex';
+    document.getElementById('dd-sim-type').textContent     = isTrailing ? '📈 EOD Trailing' : '📌 Statique';
+    document.getElementById('dd-sim-eod').textContent      = fmt$(acc.dd);
+    document.getElementById('dd-sim-floor').textContent    = fmt$(dd.ddFloor);
+    document.getElementById('dd-sim-balance').textContent  = fmt$(dd.balance);
+    document.getElementById('dd-sim-consumed').textContent = fmt$(dd.ddConsumed);
+    document.getElementById('dd-sim-left').textContent     = fmt$(dd.ddLeft);
+    const objEl = document.getElementById('dd-sim-obj');
+    objEl.textContent = dd.toObjective > 0 ? fmt$(dd.toObjective) : (currentLang==='en'?'✅ Reached!':'✅ Atteint !');
+    objEl.style.color = dd.toObjective > 0 ? 'var(--gold)' : 'var(--green)';
+    document.getElementById('dd-sim-left').style.color = dd.ddLeft < acc.dd * 0.25 ? 'var(--red)' : 'var(--green)';
+  }
+
+  if (!dd.dailyHistory.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${currentLang==='en'?'No trades for this account':'Aucun trade pour ce compte'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = dd.dailyHistory.map((day, i) => {
+    const pnlColor   = day.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const ddPct      = acc.dd > 0 ? (day.ddConsumed / acc.dd) * 100 : 0;
+    const ddStatut   = ddPct >= 100
+      ? `<span class="badge badge-echoue">${t('dd_blown')}</span>`
+      : ddPct >= 75
+      ? `<span class="badge" style="background:rgba(255,23,68,.12);color:var(--red);border:1px solid rgba(255,23,68,.3);">${t('dd_danger')}</span>`
+      : ddPct > 0
+      ? `<span class="badge badge-attente">${t('dd_used')}</span>`
+      : `<span class="badge badge-actif">${t('dd_intact')}</span>`;
+
+    // Show floor change arrow if trailing and floor moved
+    const prevFloor = i > 0 ? dd.dailyHistory[i-1].ddFloor : acc.size - acc.dd;
+    const floorMoved = isTrailing && day.ddFloor > prevFloor;
+    const floorDisplay = `${fmt$(day.ddFloor)}${floorMoved ? ' <span style="color:var(--green);font-size:10px;">↑</span>' : ''}`;
+
+    return `<tr style="${day.pnl < 0 ? 'background:rgba(231,76,60,0.04)' : day.pnl > 0 ? 'background:rgba(46,204,113,0.04)' : ''}">
+      <td>${day.date}</td>
+      <td class="text-mono" style="color:${pnlColor};font-weight:700;">${fmt$(day.pnl, true)}</td>
+      <td class="text-mono">${fmt$(day.balance)}</td>
+      <td class="text-mono" style="color:var(--text2);">${fmt$(day.hwBalance)}</td>
+      <td class="text-mono">${floorDisplay}</td>
+      <td class="text-mono" style="color:${day.ddConsumed > 0 ? 'var(--red)' : 'var(--text2)'};">${fmt$(day.ddConsumed)}</td>
+      <td class="text-mono" style="color:${day.ddLeft < acc.dd * 0.25 ? 'var(--red)' : day.ddLeft < acc.dd * 0.5 ? 'var(--gold)' : 'var(--green)'};">${fmt$(day.ddLeft)}</td>
+      <td>${ddStatut}</td>
+    </tr>`;
+  }).join('');
 }
 
 /* ─── RENDER ACCOUNTS ─── */
@@ -1379,65 +2100,93 @@ function renderAccounts() {
   const grid  = document.getElementById('accounts-grid');
   const tbody = document.getElementById('accounts-tbody');
 
-  if (!accounts.length) {
-    grid.innerHTML  = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏦</div><div>Aucun compte créé.</div></div>`;
-    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Aucune donnée</td></tr>`;
+  if (!getFilteredAccounts().length) {
+    grid.innerHTML  = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏦</div><div>${currentLang==='en'?'No account created.':'Aucun compte créé.'}</div></div>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">${t('no_data')}</td></tr>`;
     return;
   }
 
-  grid.innerHTML = accounts.map(a => {
-    const pnl    = getAccountPnl(a.name);
-    const ddUsed = getAccountDDConsumed(a.name);
-    const ddLeft = Math.max(0, a.dd - ddUsed);
-    const ddPct  = a.dd > 0 ? Math.min(100, (ddUsed / a.dd) * 100) : 0;
+  grid.innerHTML = getFilteredAccounts().map(a => {
+    const dd      = getTrailingDDDetails(a.name);
+    const pnl     = dd.totalPnl;
+    const ddUsed  = dd.ddConsumed;
+    const ddLeft  = dd.ddLeft;
+    const ddPct   = a.dd > 0 ? Math.min(100, (ddUsed / a.dd) * 100) : 0;
     const ddColor = ddPct > 75 ? 'var(--red)' : ddPct > 40 ? 'var(--gold)' : 'var(--green)';
-    const objPct  = a.size > 0 ? ((pnl / a.size) * 100).toFixed(2) : '0.00';
+    const objPct  = a.objective > 0 ? ((pnl / a.objective) * 100).toFixed(1) : '0.0';
+    const toObj   = dd.toObjective;
+    const isTrailing = (a.ddType || 'trailing') === 'trailing';
+
     return `
-<div class="account-card">
+<div class="account-card" style="cursor:pointer;" onclick="openAccountJournal('${a.name}')" title="Cliquer pour ajouter un trade">
   <div class="account-card-top">
     <div>
       <div class="account-name">${a.name}</div>
       <div class="account-firm">${a.firm || '—'}</div>
-      <div style="margin-top:8px">${badgeStatus(a.status)}</div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        ${badgeStatus(a.status)}
+        <span class="badge" style="background:rgba(79,142,247,.12);color:#4f8ef7;border:1px solid rgba(79,142,247,.3);">${isTrailing ? '📈 EOD Trailing' : '📌 Statique'}</span>
+        <span class="badge" style="background:${(a.accountType||'evaluation')==='funded'?'rgba(255,214,0,.12)':'rgba(124,77,255,.12)'};color:${(a.accountType||'evaluation')==='funded'?'var(--gold)':'var(--purple)'};border:1px solid ${(a.accountType||'evaluation')==='funded'?'rgba(255,214,0,.3)':'rgba(124,77,255,.3)'};">${(a.accountType||'evaluation')==='funded'?'💰 ' + t('acc_funded'):currentLang==='en'?'🎯 Evaluation':'🎯 Évaluation'}</span>
+      </div>
     </div>
     <div>
       <div class="account-pnl ${pnlClass(pnl)}">${fmt$(pnl, true)}</div>
       <div class="text-xs text-muted" style="text-align:right;margin-top:4px">${objPct}% objectif</div>
     </div>
   </div>
+
+  <!-- DD BAR -->
   <div class="dd-bar-wrap">
     <div class="dd-bar-label">
-      <span>DD Consommé: <b>${fmt$(ddUsed)}</b></span>
-      <span>DD Restant: <b style="color:${ddColor}">${fmt$(ddLeft)}</b></span>
+      <span>${t('th_consumed')}: <b style="color:${ddColor}">${fmt$(ddUsed)}</b></span>
+      <span>${t('th_remaining')}: <b style="color:${ddLeft < a.dd * 0.25 ? 'var(--red)' : 'var(--green)'}">${fmt$(ddLeft)}</b></span>
     </div>
     <div class="dd-bar"><div class="dd-fill" style="width:${ddPct}%;background:${ddColor}"></div></div>
   </div>
-  <div class="account-meta">
+
+  <!-- DD FLOOR INFO -->
+  <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;margin-top:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">${t('floor_dd')}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text2);">${fmt$(dd.ddFloor)}</div>
+    </div>
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">${t('balance_label')}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text);">${fmt$(dd.balance)}</div>
+    </div>
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">${t('to_obj')}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">${toObj > 0 ? fmt$(toObj) : (currentLang==='en'?'✅ Reached':'✅ Atteint')}</div>
+    </div>
+  </div>
+
+  <div class="account-meta" style="margin-top:10px;">
     <div class="account-meta-item">
-      <div class="account-meta-label">Taille</div>
+      <div class="account-meta-label">${t('taille')}</div>
       <div class="account-meta-val">${fmt$(a.size)}</div>
     </div>
     <div class="account-meta-item">
-      <div class="account-meta-label">Objectif</div>
+      <div class="account-meta-label">${t('objectif')}</div>
       <div class="account-meta-val">${fmt$(a.objective)}</div>
     </div>
     <div class="account-meta-item">
-      <div class="account-meta-label">Daily Loss</div>
-      <div class="account-meta-val">${fmt$(a.daily)}</div>
+      <div class="account-meta-label">${t('eod_dd')}</div>
+      <div class="account-meta-val">${fmt$(a.dd)}</div>
     </div>
   </div>
   <div class="divider"></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end">
+  <div style="display:flex;gap:8px;justify-content:flex-end" onclick="event.stopPropagation()">
     <button class="action-btn" onclick="openAccountModal('${a.id}')">✏️</button>
     <button class="action-btn del" onclick="deleteAccount('${a.id}')">🗑️</button>
   </div>
 </div>`;
   }).join('');
 
-  tbody.innerHTML = accounts.map(a => {
-    const pnl    = getAccountPnl(a.name);
-    const ddUsed = getAccountDDConsumed(a.name);
-    const ddLeft = Math.max(0, a.dd - ddUsed);
+  tbody.innerHTML = getFilteredAccounts().map(a => {
+    const dd     = getTrailingDDDetails(a.name);
+    const pnl    = dd.totalPnl;
+    const ddUsed = dd.ddConsumed;
+    const ddLeft = dd.ddLeft;
     return `<tr>
       <td>${a.name}</td>
       <td class="text-mono">${fmt$(a.size)}</td>
@@ -1448,8 +2197,10 @@ function renderAccounts() {
       <td>${badgeStatus(a.status)}</td>
       <td class="text-mono ${pnlClass(pnl)}">${fmt$(pnl, true)}</td>
       <td>${a.start || '—'}</td>
+      <td class="text-mono">${fmt$(dd.ddFloor)}</td>
       <td class="text-mono neg">${fmt$(ddUsed)}</td>
       <td class="text-mono ${ddLeft <= 0 ? 'neg' : 'pos'}">${fmt$(ddLeft)}</td>
+      <td class="text-mono ${pnlClass(-dd.toObjective)}">${dd.toObjective > 0 ? fmt$(dd.toObjective) : '✅'}</td>
       <td>
         <button class="action-btn" onclick="openAccountModal('${a.id}')">✏️</button>
         <button class="action-btn del" onclick="deleteAccount('${a.id}')">🗑️</button>
@@ -1459,15 +2210,75 @@ function renderAccounts() {
 }
 
 function badgeStatus(s) {
-  const map = { 'actif':'badge-actif','passé':'badge-passe','en attente':'badge-attente','échoué':'badge-echoue' };
-  return `<span class="badge ${map[s] || 'badge-passe'}">${s}</span>`;
+  const map = { 'actif':'badge-actif','passé':'badge-passe','en attente':'badge-attente','échoué':'badge-echoue',
+                'active':'badge-actif','past':'badge-passe','pending':'badge-attente','failed':'badge-echoue' };
+  const labelMap = { 'actif': t('status_actif'), 'passé': t('status_passe'), 'en attente': t('status_attente'), 'échoué': t('status_echoue'),
+                     'active': t('status_actif'), 'past': t('status_passe'), 'pending': t('status_attente'), 'failed': t('status_echoue') };
+  return `<span class="badge ${map[s] || 'badge-passe'}">${labelMap[s] || s}</span>`;
 }
 
 /* ─── TRADE MODAL ─── */
+/* ─── TRADE MODE: SINGLE / MULTI ─── */
+let tradeMode = 'single';
+
+function setTradeMode(mode) {
+  tradeMode = mode;
+  document.getElementById('trade-single-account').style.display = mode === 'single' ? '' : 'none';
+  document.getElementById('trade-multi-accounts').style.display = mode === 'multi'  ? '' : 'none';
+  document.getElementById('mode-single-btn').className = mode === 'single' ? 'btn btn-primary btn-sm'   : 'btn btn-secondary btn-sm';
+  document.getElementById('mode-multi-btn').className  = mode === 'multi'  ? 'btn btn-primary btn-sm'   : 'btn btn-secondary btn-sm';
+  if (mode === 'multi') renderMultiAccountList();
+}
+
+function renderMultiAccountList() {
+  const container = document.getElementById('multi-account-list');
+  const fa = getFilteredAccounts();
+  if (!fa.length) {
+    container.innerHTML = `<div style="font-size:12px;color:var(--text3);">${currentLang==='en'?'No accounts available':'Aucun compte disponible'}</div>`;
+    return;
+  }
+  container.innerHTML = fa.map(a => {
+    const lastTrade   = [...trades].filter(t=>t.account===a.name).sort((x,y)=>x.date.localeCompare(y.date)).pop();
+    const lastBalance = lastTrade ? lastTrade.balanceFinal : a.size;
+    return `
+    <label class="acc-check-card" id="acc-card-${a.id}" onclick="toggleAccCard('${a.id}')">
+      <input type="checkbox" id="acc-cb-${a.id}" value="${a.name}">
+      <div class="acc-check-mark" id="acc-cm-${a.id}">✓</div>
+      <div class="acc-check-info">
+        <div class="acc-check-name">${a.name}</div>
+        <div class="acc-check-sub">${a.firm||'—'} · Bal: $${Number(lastBalance).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function toggleAccCard(accId) {
+  const card = document.getElementById('acc-card-'+accId);
+  const cb   = document.getElementById('acc-cb-'+accId);
+  cb.checked = !cb.checked;
+  card.classList.toggle('selected', cb.checked);
+}
+
+function getSelectedMultiAccounts() {
+  return accounts.filter(a => {
+    const cb = document.getElementById('acc-cb-'+a.id);
+    return cb && cb.checked;
+  });
+}
+
 function openTradeModal(id = null) {
   document.getElementById('trade-edit-id').value = id || '';
   document.getElementById('trade-modal-title').textContent = id ? 'Modifier Trade' : 'Nouveau Trade';
   populateAccountSelects();
+
+  // Show/hide mode toggle (only for new trades)
+  document.getElementById('trade-mode-toggle').style.display = id ? 'none' : 'flex';
+
+  // Reset to single mode for new trades
+  if (!id) {
+    tradeMode = 'single';
+    setTradeMode('single');
+  }
 
   if (id) {
     const t = trades.find(x => x.id === id);
@@ -1484,6 +2295,9 @@ function openTradeModal(id = null) {
     document.getElementById('t-tp').value           = t.tp;
     document.getElementById('t-exit').value         = t.exit;
     document.getElementById('t-status').value       = t.status;
+    // Force single mode when editing
+    document.getElementById('trade-single-account').style.display = '';
+    document.getElementById('trade-multi-accounts').style.display = 'none';
   } else {
     document.getElementById('t-date').value = new Date().toISOString().slice(0,10);
     document.getElementById('t-account').value = '';
@@ -1499,12 +2313,90 @@ function openTradeModal(id = null) {
   openModal('trade-modal');
 }
 
+function saveTrade() {
+  const editId = document.getElementById('trade-edit-id').value;
+  const date   = document.getElementById('t-date').value;
+  if (!date) { showToast('Renseignez la date', 'error'); return; }
+
+  const inst  = document.getElementById('t-instrument').value;
+  const qty   = parseFloat(document.getElementById('t-qty').value)   || 0;
+  const entry = parseFloat(document.getElementById('t-entry').value) || 0;
+  const exit  = parseFloat(document.getElementById('t-exit').value)  || 0;
+  const side  = document.getElementById('t-side').value;
+  const tv    = TICK_VALUES[inst];
+
+  let pnlPts = 0, pnlNet = 0;
+  if (entry && exit && tv) {
+    const raw = side === 'BUY' ? exit - entry : entry - exit;
+    pnlPts = raw;
+    pnlNet = (raw / tv.tick) * tv.dollarPerTick * qty;
+  }
+
+  const commonFields = {
+    date, instrument: inst, side, qty, entry,
+    sl:     parseFloat(document.getElementById('t-sl').value) || 0,
+    tp:     parseFloat(document.getElementById('t-tp').value) || 0,
+    exit, pnlPts, pnlNet,
+    status: document.getElementById('t-status').value,
+  };
+
+  // ── EDIT MODE (single account only) ──
+  if (editId) {
+    const account = document.getElementById('t-account').value;
+    if (!account) { showToast('Sélectionnez un compte', 'error'); return; }
+    const binit = parseFloat(document.getElementById('t-balance-init').value) || 0;
+    const obj = {
+      id: editId, account,
+      firm: document.getElementById('t-firm').value,
+      balanceInit: binit, balanceFinal: binit + pnlNet,
+      ...commonFields,
+    };
+    const i = trades.findIndex(x => x.id === editId);
+    if (i >= 0) trades[i] = obj;
+
+  } else if (tradeMode === 'multi') {
+    // ── MULTI-ACCOUNT MODE ──
+    const selected = getSelectedMultiAccounts();
+    if (!selected.length) { showToast('Sélectionnez au moins un compte', 'error'); return; }
+
+    selected.forEach(a => {
+      // Auto-calculate balance init from last trade of this account
+      const lastTrade   = [...trades].filter(t=>t.account===a.name).sort((x,y)=>x.date.localeCompare(y.date)).pop();
+      const binit       = lastTrade ? (lastTrade.balanceFinal || a.size) : a.size;
+      trades.push({
+        id: uid(), account: a.name, firm: a.firm || '',
+        balanceInit: binit, balanceFinal: binit + pnlNet,
+        ...commonFields,
+      });
+    });
+
+  } else {
+    // ── SINGLE ACCOUNT MODE ──
+    const account = document.getElementById('t-account').value;
+    if (!account) { showToast('Sélectionnez un compte', 'error'); return; }
+    const binit = parseFloat(document.getElementById('t-balance-init').value) || 0;
+    trades.push({
+      id: uid(), account,
+      firm: document.getElementById('t-firm').value,
+      balanceInit: binit, balanceFinal: binit + pnlNet,
+      ...commonFields,
+    });
+  }
+
+  save();
+  closeModal('trade-modal');
+  renderJournal();
+  renderAccounts();
+  renderDDHistory();
+  const n = tradeMode === 'multi' ? `${getSelectedMultiAccounts ? '' : ''}Trade copié sur ${document.querySelectorAll('.acc-check-card.selected').length} compte(s) ✔` : 'Trade sauvegardé ✔';
+  showToast(editId ? 'Trade modifié ✔' : tradeMode === 'multi' ? `Trade copié ✔` : 'Trade sauvegardé ✔');
+}
+
 function onTradeAccountChange() {
   const accName = document.getElementById('t-account').value;
   const acc = accounts.find(a => a.name === accName);
   if (acc) {
     document.getElementById('t-firm').value = acc.firm;
-    // Auto-fill last known balance
     const accTrades = trades.filter(t => t.account === accName).sort((a,b)=>a.date.localeCompare(b.date));
     if (accTrades.length > 0) {
       document.getElementById('t-balance-init').value = accTrades[accTrades.length-1].balanceFinal || acc.size;
@@ -1514,8 +2406,8 @@ function onTradeAccountChange() {
   } else {
     document.getElementById('t-firm').value = '';
   }
+  calcTrade();
 }
-
 function calcTrade() {
   const inst  = document.getElementById('t-instrument').value;
   const qty   = parseFloat(document.getElementById('t-qty').value)   || 0;
@@ -1546,62 +2438,13 @@ function calcTrade() {
   document.getElementById('calc-bal-final').className = 'text-mono fw-700 ' + pnlClass(pnlNet);
 }
 
-function saveTrade() {
-  const account = document.getElementById('t-account').value;
-  if (!account) { showToast('Sélectionnez un compte', 'error'); return; }
-  const date = document.getElementById('t-date').value;
-  if (!date)    { showToast('Renseignez la date', 'error'); return; }
-
-  const inst  = document.getElementById('t-instrument').value;
-  const qty   = parseFloat(document.getElementById('t-qty').value)   || 0;
-  const entry = parseFloat(document.getElementById('t-entry').value) || 0;
-  const exit  = parseFloat(document.getElementById('t-exit').value)  || 0;
-  const binit = parseFloat(document.getElementById('t-balance-init').value) || 0;
-  const side  = document.getElementById('t-side').value;
-  const tv    = TICK_VALUES[inst];
-
-  let pnlPts = 0, pnlNet = 0;
-  if (entry && exit && tv) {
-    const raw = side === 'BUY' ? exit - entry : entry - exit;
-    pnlPts = raw;
-    pnlNet = (raw / tv.tick) * tv.dollarPerTick * qty;
-  }
-
-  const id  = document.getElementById('trade-edit-id').value;
-  const obj = {
-    id: id || uid(),
-    date, account,
-    firm:         document.getElementById('t-firm').value,
-    balanceInit:  binit,
-    instrument:   inst,
-    side,
-    qty,
-    entry,
-    sl:           parseFloat(document.getElementById('t-sl').value) || 0,
-    tp:           parseFloat(document.getElementById('t-tp').value) || 0,
-    exit,
-    pnlPts:       pnlPts,
-    pnlNet:       pnlNet,
-    balanceFinal: binit + pnlNet,
-    status:       document.getElementById('t-status').value,
-  };
-
-  if (id) { const i = trades.findIndex(x => x.id === id); trades[i] = obj; }
-  else trades.push(obj);
-
-  save();
-  closeModal('trade-modal');
-  renderJournal();
-  renderAccounts();
-  showToast('Trade sauvegardé ✔');
-}
-
 function deleteTrade(id) {
   if (!confirm('Supprimer ce trade ?')) return;
   trades = trades.filter(t => t.id !== id);
   save();
   renderJournal();
   renderAccounts();
+  renderDDHistory();
   showToast('Trade supprimé');
 }
 
@@ -1611,14 +2454,19 @@ function renderJournal() {
   const filterStatus = document.getElementById('journal-filter-status').value;
   const filterMonth  = document.getElementById('journal-filter-month').value;
 
-  let data = [...trades].sort((a,b) => b.date.localeCompare(a.date));
+  let data = [...getFilteredTrades()].sort((a,b) => b.date.localeCompare(a.date));
   if (filterAcc)    data = data.filter(t => t.account === filterAcc);
   if (filterStatus) data = data.filter(t => t.status  === filterStatus);
   if (filterMonth)  data = data.filter(t => t.date.startsWith(filterMonth));
 
+  if (journalView === 'grid') {
+    renderCalendar(data);
+    return;
+  }
+
   const tbody = document.getElementById('journal-tbody');
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="16" class="empty-state">Aucun trade</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" class="empty-state">${t('no_trades')}</td></tr>`;
     return;
   }
 
@@ -1640,8 +2488,8 @@ function renderJournal() {
       <td>${badgeTrade(t.status)}</td>
       <td class="text-mono">${fmt$(t.balanceFinal)}</td>
       <td>
-        <button class="action-btn" onclick="openTradeModal('${t.id}')">✏️</button>
-        <button class="action-btn del" onclick="deleteTrade('${t.id}')">🗑️</button>
+        <button class="action-btn" onclick="requireJournalPwd('openTradeModal','${t.id}')">✏️</button>
+        <button class="action-btn del" onclick="requireJournalPwd('deleteTrade','${t.id}')">🗑️</button>
       </td>
     </tr>`).join('');
 }
@@ -1654,7 +2502,8 @@ function badgeTrade(s) {
 /* ─── DASHBOARD ─── */
 function renderDashboard() {
   const accName = document.getElementById('dash-account').value;
-  const data = accName ? trades.filter(t => t.account === accName) : trades;
+  const filteredAll = getFilteredTrades();
+  const data = accName ? filteredAll.filter(t => t.account === accName) : filteredAll;
   const today = new Date().toISOString().slice(0,10);
   const weekStart = getWeekStart(new Date());
   const monthStr  = today.slice(0,7);
@@ -1700,7 +2549,7 @@ function renderDashboard() {
 
   // Month label
   const now2 = new Date();
-  const monthName = now2.toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+  const monthName = now2.toLocaleDateString(currentLang === 'en' ? 'en-US' : 'fr-FR', { month:'long', year:'numeric' });
   const mLabel = document.getElementById('d-month-label');
   if (mLabel) mLabel.textContent = monthName;
 
@@ -1718,7 +2567,9 @@ function renderDashboard() {
   set('d-avgloss',    fmt$(avgLoss), 'stat-value neg');
 
   const wrSub = document.getElementById('d-winrate-sub');
-  if (wrSub) wrSub.textContent = `sur ${data.length} trade${data.length>1?'s':''}`;
+  if (wrSub) wrSub.textContent = currentLang === 'en'
+    ? `on ${data.length} trade${data.length>1?'s':''}`
+    : `sur ${data.length} trade${data.length>1?'s':''}`;
   const bDate = document.getElementById('d-best-date');
   if (bDate) bDate.textContent = bestDate;
   const wDate = document.getElementById('d-worst-date');
@@ -1731,115 +2582,234 @@ function renderDashboard() {
   const tdSub = document.getElementById('d-trade-days-sub');
   if (tdSub) {
     const avg = tradingDays > 0 ? (data.length / tradingDays).toFixed(1) : '0';
-    tdSub.textContent = `avg ${avg} trades/jour · ${tradingDays} jour${tradingDays > 1 ? 's' : ''} distincts`;
+    tdSub.textContent = currentLang === 'en'
+      ? `avg ${avg} trades/day · ${tradingDays} distinct day${tradingDays>1?'s':''}`
+      : `avg ${avg} trades/jour · ${tradingDays} jour${tradingDays > 1 ? 's' : ''} distincts`;
   }
+
+  // ← APPEL MANQUANT — c'était la cause du graphique vide
+  renderEquityChart(data);
+
   renderDashSummary();
 }
 
 function renderEquityChart(data) {
-  const sorted = [...data].sort((a,b) => a.date.localeCompare(b.date));
-  const dailyMap = {};
-  sorted.forEach(t => { dailyMap[t.date] = (dailyMap[t.date] || 0) + t.pnlNet; });
-  const labels = Object.keys(dailyMap).sort();
-  const vals   = labels.map(d => dailyMap[d]);
+  const canvas = document.getElementById('equity-chart');
+  if (!canvas) return;
 
-  // Cumulative equity
+  if (equityChart) { equityChart.destroy(); equityChart = null; }
+
+  // Build sorted daily map
+  const dailyMap = {};
+  data.forEach(t => {
+    if (t.date && t.pnlNet != null)
+      dailyMap[t.date] = (dailyMap[t.date] || 0) + t.pnlNet;
+  });
+  const dateKeys = Object.keys(dailyMap).sort();
+
+  // Update total PnL label next to chart title
+  const totalPnl = data.reduce((s, t) => s + (t.pnlNet || 0), 0);
+  const pnlLabel = document.getElementById('chart-pnl-total');
+  if (pnlLabel) {
+    pnlLabel.textContent = fmt$(totalPnl, true);
+    pnlLabel.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  // Empty state
+  if (!dateKeys.length) {
+    const ctx0 = canvas.getContext('2d');
+    equityChart = new Chart(ctx0, {
+      type: 'line',
+      data: { labels: ['—'], datasets: [{ data: [0], borderColor: '#2ecc71', pointRadius: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#555' } },
+          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#555' } }
+        }
+      }
+    });
+    return;
+  }
+
+  // Labels "1 mai", "5 avr"…
+  const labels = dateKeys.map(d => {
+    const dt = new Date(d + 'T12:00:00');
+    return dt.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short' });
+  });
+
+  // Cumulative values
   const cumulative = [];
   let cum = 0;
-  vals.forEach(v => { cum += v; cumulative.push(parseFloat(cum.toFixed(2))); });
+  dateKeys.forEach(d => {
+    cum = parseFloat((cum + dailyMap[d]).toFixed(2));
+    cumulative.push(cum);
+  });
 
-  const ctx = document.getElementById('equity-chart').getContext('2d');
-  if (equityChart) equityChart.destroy();
+  // Pad with $0 start if only 1 point
+  const finalLabels = cumulative.length === 1 ? ['Début', ...labels] : labels;
+  const finalData   = cumulative.length === 1 ? [0, ...cumulative]   : cumulative;
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
-  gradient.addColorStop(0, 'rgba(46,204,113,0.18)');
-  gradient.addColorStop(1, 'rgba(46,204,113,0)');
+  const canvasCtx = canvas.getContext('2d');
 
-  equityChart = new Chart(ctx, {
+  // Gradient
+  const gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
+  if (totalPnl >= 0) {
+    gradient.addColorStop(0,   'rgba(46,204,113,0.25)');
+    gradient.addColorStop(0.6, 'rgba(46,204,113,0.06)');
+    gradient.addColorStop(1,   'rgba(46,204,113,0)');
+  } else {
+    gradient.addColorStop(0,   'rgba(231,76,60,0.20)');
+    gradient.addColorStop(0.6, 'rgba(231,76,60,0.05)');
+    gradient.addColorStop(1,   'rgba(231,76,60,0)');
+  }
+
+  // Remove old tooltip div if exists
+  const oldTip = document.getElementById('eq-tooltip');
+  if (oldTip) oldTip.remove();
+
+  // Create HTML tooltip div (much simpler than canvas drawing)
+  const tipDiv = document.createElement('div');
+  tipDiv.id = 'eq-tooltip';
+  tipDiv.style.cssText = `
+    position:absolute; display:none; pointer-events:none;
+    background:#1a1a1a; border-radius:8px; border:1.5px solid #2ecc71;
+    padding:10px 14px; font-family:Inter,sans-serif; z-index:100;
+    min-width:140px; white-space:nowrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  `;
+  tipDiv.innerHTML = `
+    <div id="eq-tip-date"  style="font-size:11px;color:#888;margin-bottom:6px;font-weight:500;"></div>
+    <div id="eq-tip-label" style="font-size:10px;color:#555;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:3px;">PNL cumulé</div>
+    <div id="eq-tip-val"   style="font-size:16px;font-weight:800;color:#2ecc71;letter-spacing:-0.3px;"></div>
+  `;
+  // Insert inside the chart card (position:relative parent)
+  canvas.parentElement.style.position = 'relative';
+  canvas.parentElement.appendChild(tipDiv);
+
+  equityChart = new Chart(canvasCtx, {
     type: 'line',
     data: {
-      labels,
+      labels: finalLabels,
       datasets: [{
         label: 'PNL cumulé $',
-        data: cumulative,
-        borderColor: '#2ecc71',
+        data: finalData,
+        segment: {
+          borderColor: seg => finalData[seg.p1DataIndex] >= 0 ? '#2ecc71' : '#e74c3c',
+        },
         backgroundColor: gradient,
         borderWidth: 2.5,
-        pointRadius: 4,
-        pointBackgroundColor: '#2ecc71',
-        pointBorderColor: '#1e1e1e',
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        pointBackgroundColor: pt => finalData[pt.dataIndex] >= 0 ? '#2ecc71' : '#e74c3c',
+        pointBorderColor: '#1a1a1a',
         pointBorderWidth: 2,
-        tension: 0.4,
+        tension: 0.35,
         fill: true,
-      }, {
-        label: 'P&L Journalier $',
-        data: vals,
-        borderColor: 'rgba(79,142,247,0.5)',
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        pointRadius: 2,
-        borderDash: [5,4],
-        tension: 0.3,
-        fill: false,
-        yAxisID: 'y2',
+        spanGaps: true,
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeInOutQuart' },
       interaction: { intersect: false, mode: 'index' },
       plugins: {
-        legend: { labels: { color: '#666666', font: { family: 'Inter', size: 11, weight: '500' } } },
+        legend: { display: false },
         tooltip: {
-          backgroundColor: '#252525',
-          borderColor: '#333333',
-          borderWidth: 1,
-          titleColor: '#f0f0f0',
-          bodyColor: '#aaaaaa',
-          padding: 10,
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${fmt$(ctx.parsed.y, true)}`
+          enabled: false,
+          external(context) {
+            const tip   = document.getElementById('eq-tooltip');
+            const dateEl = document.getElementById('eq-tip-date');
+            const valEl  = document.getElementById('eq-tip-val');
+            if (!tip) return;
+
+            if (context.tooltip.opacity === 0) {
+              tip.style.display = 'none';
+              return;
+            }
+
+            const dp    = context.tooltip.dataPoints[0];
+            const value = dp.parsed.y;
+            const color = value >= 0 ? '#2ecc71' : '#e74c3c';
+            const valTxt = (value >= 0 ? '+' : '') + '$' +
+              Math.abs(value).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            tip.style.borderColor = color;
+            dateEl.textContent = dp.label;
+            valEl.textContent  = valTxt;
+            valEl.style.color  = color;
+
+            // Position relative to canvas parent
+            const rect   = canvas.getBoundingClientRect();
+            const parent = canvas.parentElement.getBoundingClientRect();
+            const tx     = context.tooltip.caretX;
+            const ty     = context.tooltip.caretY;
+
+            let left = tx + 16;
+            if (left + 160 > canvas.width) left = tx - 160;
+            let top  = ty - 40;
+            if (top < 0) top = 4;
+
+            tip.style.display = 'block';
+            tip.style.left    = left + 'px';
+            tip.style.top     = top  + 'px';
           }
         }
       },
       scales: {
         x: {
-          grid: { color: 'rgba(50,50,50,.8)' },
-          ticks: { color: '#555555', font: { family: 'Inter', size: 10 }, maxRotation: 45 }
+          grid: { color: 'rgba(255,255,255,0.035)', drawBorder: false },
+          border: { display: false },
+          ticks: { color: '#555', font: { family: 'Inter', size: 11 }, maxRotation: 0, maxTicksLimit: 10 }
         },
         y: {
-          position: 'left',
-          grid: { color: 'rgba(50,50,50,.8)' },
-          ticks: { color: '#666666', font: { family: 'Inter', size: 10 }, callback: v => fmt$(v) }
-        },
-        y2: {
-          position: 'right',
-          grid: { display: false },
-          ticks: { color: 'rgba(79,142,247,.5)', font: { family: 'Inter', size: 10 }, callback: v => fmt$(v) }
+          grid: { color: 'rgba(255,255,255,0.035)', drawBorder: false },
+          border: { display: false },
+          beginAtZero: true,
+          ticks: {
+            color: '#555',
+            font: { family: 'Inter', size: 11 },
+            callback: v => {
+              const abs = Math.abs(v).toLocaleString('fr-FR');
+              return v < 0 ? `-$${abs}` : `$${abs}`;
+            }
+          }
         }
       }
     }
   });
+
+  // Hide tooltip when mouse leaves chart
+  canvas.addEventListener('mouseleave', () => {
+    const tip = document.getElementById('eq-tooltip');
+    if (tip) tip.style.display = 'none';
+  });
 }
+
+
 
 function renderDashSummary() {
   const tbody = document.getElementById('dash-summary-tbody');
-  if (!accounts.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Aucun compte</td></tr>`;
+  const fa = getFilteredAccounts();
+  if (!fa.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${currentLang==='en'?'No accounts':'Aucun compte'}</td></tr>`;
     return;
   }
-  tbody.innerHTML = accounts.map(a => {
-    const pnl    = getAccountPnl(a.name);
-    const ddUsed = getAccountDDConsumed(a.name);
-    const ddLeft = Math.max(0, a.dd - ddUsed);
-    const objPct  = a.objective > 0 ? ((pnl / a.objective)*100).toFixed(1) + '%' : '—';
+  tbody.innerHTML = fa.map(a => {
+    const dd     = getTrailingDDDetails(a.name);
+    const pnl    = dd.totalPnl;
+    const objPct = a.objective > 0 ? ((pnl / a.objective)*100).toFixed(1) + '%' : '—';
     return `<tr>
       <td>${a.name}</td>
       <td>${a.firm || '—'}</td>
       <td class="text-mono">${fmt$(a.size)}</td>
       <td class="text-mono ${pnlClass(pnl)}">${fmt$(pnl, true)}</td>
       <td class="text-mono">${objPct}</td>
-      <td class="text-mono neg">${fmt$(ddUsed)}</td>
-      <td class="text-mono ${ddLeft<=0?'neg':'pos'}">${fmt$(ddLeft)}</td>
+      <td class="text-mono">${fmt$(dd.ddFloor)}</td>
+      <td class="text-mono neg">${fmt$(dd.ddConsumed)}</td>
+      <td class="text-mono ${dd.ddLeft<=0?'neg':'pos'}">${fmt$(dd.ddLeft)}</td>
     </tr>`;
   }).join('');
 }
@@ -1874,12 +2844,13 @@ function renderWeekly() {
   const wEnd   = getWeekEnd(now, currentWeekOffset);
 
   // Label
-  const opts = { day:'2-digit', month:'short' };
-  document.getElementById('week-label').textContent =
-    `${wStart.toLocaleDateString('fr-FR', opts)} — ${wEnd.toLocaleDateString('fr-FR', { ...opts, year:'numeric' })}`;
+  const locale = currentLang === 'fr' ? 'fr-FR' : 'en-US';
+  const startStr = wStart.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
+  const endStr = wEnd.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('week-label').textContent = `${startStr} — ${endStr}`;
 
-  // Filter trades
-  let wTrades = trades.filter(t => {
+  // Filter trades — respect global type filter
+  let wTrades = getFilteredTrades().filter(t => {
     const d = new Date(t.date);
     return d >= wStart && d <= new Date(wEnd.getTime() + 86399999);
   });
@@ -1903,7 +2874,7 @@ function renderWeekly() {
   pnlEl.className = 'summary-item-val ' + pnlClass(pnl);
 
   // Per-day breakdown (Mon–Fri)
-  const JOURS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const JOURS = [t('day_mon'),t('day_tue'),t('day_wed'),t('day_thu'),t('day_fri')];
   const dayTbody = document.getElementById('weekly-days-tbody');
 
   const rows = [];
@@ -1946,7 +2917,7 @@ function renderWeekly() {
   // Trades list
   const tradeTbody = document.getElementById('weekly-trades-tbody');
   if (!wTrades.length) {
-    tradeTbody.innerHTML = `<tr><td colspan="8" class="empty-state">Aucun trade cette semaine</td></tr>`;
+    tradeTbody.innerHTML = `<tr><td colspan="8" class="empty-state">${t('no_trades_week')}</td></tr>`;
     return;
   }
   const sorted = [...wTrades].sort((a,b)=>a.date.localeCompare(b.date));
@@ -1962,6 +2933,1026 @@ function renderWeekly() {
   </tr>`).join('');
 }
 
+/* ─── JOURNAL VIEW TOGGLE ─── */
+let journalView = 'grid'; // 'grid' | 'list'
+
+function setJournalView(v) {
+  journalView = v;
+  document.getElementById('journal-grid-view').style.display = v === 'grid' ? '' : 'none';
+  document.getElementById('journal-list-view').style.display = v === 'list' ? '' : 'none';
+  document.getElementById('view-grid-btn').className = v === 'grid' ? 'btn btn-primary btn-sm'   : 'btn btn-secondary btn-sm';
+  document.getElementById('view-list-btn').className = v === 'list' ? 'btn btn-primary btn-sm'   : 'btn btn-secondary btn-sm';
+  renderJournal();
+}
+
+/* ─── RENDER CALENDAR GRID ─── */
+function renderCalendar(data) {
+  const cal    = document.getElementById('journal-calendar');
+  const month  = document.getElementById('journal-filter-month').value;
+  if (!month) { cal.innerHTML = `<div class="empty-state" style="padding:40px">${t('select_month')}</div>`; return; }
+
+  const [y, m] = month.split('-').map(Number);
+  const firstDay = new Date(y, m-1, 1);
+  const lastDay  = new Date(y, m, 0);
+  const today    = new Date().toISOString().slice(0,10);
+  const monthLabel = firstDay.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{month:'long',year:'numeric'});
+
+  // Build daily map from filtered data
+  const dailyMap = {};
+  data.forEach(t => {
+    if (!dailyMap[t.date]) dailyMap[t.date] = { trades:[], pnl:0 };
+    dailyMap[t.date].trades.push(t);
+    dailyMap[t.date].pnl += (t.pnlNet||0);
+  });
+
+  const JOURS = [t('day_sun_s'),t('day_mon_s'),t('day_tue_s'),t('day_wed_s'),t('day_thu_s'),t('day_fri_s'),t('day_sat_s')];
+  let html = `<div class="cal-month-label">${monthLabel.charAt(0).toUpperCase()+monthLabel.slice(1)}</div>`;
+  html += `<div class="cal-grid">`;
+  JOURS.forEach(j => { html += `<div class="cal-day-header">${j}</div>`; });
+
+  // Empty cells before first day
+  const startDow = firstDay.getDay(); // 0=Sun
+  for (let i=0; i<startDow; i++) html += `<div class="cal-cell empty"></div>`;
+
+  for (let d=1; d<=lastDay.getDate(); d++) {
+    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const day     = dailyMap[dateStr];
+    const isToday = dateStr === today;
+
+    if (!day) {
+      html += `<div class="cal-cell${isToday?' cal-today':''} empty">
+        <div class="cal-date">${d}</div>
+      </div>`;
+    } else {
+      const pnl    = parseFloat(day.pnl.toFixed(2));
+      const cls    = pnl > 0 ? 'day-pos' : pnl < 0 ? 'day-neg' : '';
+      const pnlCls = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neu';
+      const pnlTxt = (pnl>=0?'+':'') + '$' + Math.abs(pnl).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+      const cnt    = day.trades.length;
+      html += `<div class="cal-cell has-trades ${cls}${isToday?' cal-today':''}" onclick="toggleCalDay('${dateStr}')">
+        <div class="cal-date">${d}</div>
+        <div class="cal-pnl ${pnlCls}">${pnlTxt}</div>
+        <div class="cal-trades-count">${cnt} trade${cnt>1?'s':''}</div>
+      </div>`;
+    }
+  }
+  html += `</div>`;
+
+  // Day detail panel (hidden by default, shown on click)
+  html += `<div id="cal-day-detail" class="cal-day-detail">
+    <div class="cal-day-detail-title">
+      <span id="cal-day-detail-date"></span>
+      <button class="btn btn-secondary btn-sm" onclick="closeCalDay()">✕ Fermer</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Instrument</th><th>Position</th><th>Contrats</th>
+          <th>Entrée</th><th>Sortie</th><th>PnL pts</th><th>PnL NET $</th><th>Statut</th>
+        </tr></thead>
+        <tbody id="cal-day-tbody"></tbody>
+      </table>
+    </div>
+  </div>`;
+
+  cal.innerHTML = html;
+}
+
+let _openCalDay = null;
+function toggleCalDay(dateStr) {
+  const detail = document.getElementById('cal-day-detail');
+  if (!detail) return;
+  if (_openCalDay === dateStr) { closeCalDay(); return; }
+  _openCalDay = dateStr;
+
+  const filterAcc = document.getElementById('journal-filter-account').value;
+  const dayTrades = trades.filter(t => t.date === dateStr && (!filterAcc || t.account === filterAcc))
+                          .sort((a,b)=>a.date.localeCompare(b.date));
+
+  const dt = new Date(dateStr+'T12:00:00');
+  document.getElementById('cal-day-detail-date').textContent =
+    dt.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  document.getElementById('cal-day-tbody').innerHTML = dayTrades.map(t => `<tr>
+    <td><b>${t.instrument}</b></td>
+    <td style="color:${t.side==='BUY'?'var(--green)':'var(--red)'};">${t.side}</td>
+    <td>${t.qty}</td>
+    <td class="text-mono">${t.entry||'—'}</td>
+    <td class="text-mono">${t.exit||'—'}</td>
+    <td class="text-mono ${pnlClass(t.pnlPts)}">${t.pnlPts!=null?t.pnlPts.toFixed(2)+' pts':'—'}</td>
+    <td class="text-mono ${pnlClass(t.pnlNet)}">${fmt$(t.pnlNet,true)}</td>
+    <td>${badgeTrade(t.status)}</td>
+  </tr>`).join('') || `<tr><td colspan="8" class="empty-state">${t('no_data_cal')}</tr>`;
+
+  detail.classList.add('open');
+  detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function closeCalDay() {
+  _openCalDay = null;
+  const d = document.getElementById('cal-day-detail');
+  if (d) d.classList.remove('open');
+}
+
+/* ─── RESET ALL DATA ─── */
+function resetAllData() {
+  if (!confirm('⚠️ ATTENTION — Effacer TOUTES les données ?\n\nComptes, trades, liens de partage — tout sera supprimé définitivement.\n\nCette action est irréversible.')) return;
+  if (!confirm('Dernière confirmation : êtes-vous certain de vouloir tout effacer ?')) return;
+
+  // Clear all localStorage keys
+  localStorage.removeItem('qh_accounts');
+  localStorage.removeItem('qh_trades');
+  localStorage.removeItem('qh_shares');
+  // Keep password
+
+  // Reset in-memory state
+  accounts   = [];
+  trades     = [];
+  shareLinks = [];
+
+  // Reset all selectors
+  ['dash-account','weekly-account','dd-sim-account',
+   'journal-filter-account','journal-filter-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  // Re-render everything
+  populateAccountSelects();
+  renderAccounts();
+  renderJournal();
+  renderDDHistory();
+  renderDashboard();
+  renderWeekly();
+
+  showToast('Toutes les données ont été effacées');
+}
+
+/* ─── I18N TRANSLATIONS ─── */
+
+const TRANSLATIONS = {
+  fr: {
+    autosave: 'AUTO-SAVE ON',
+    tab_accounts: 'Comptes',
+    tab_journal: 'Journal',
+    tab_dashboard: 'Dashboard',
+    tab_weekly: 'Rapport Hebdo',
+    // Accounts
+    accounts_title: 'Gestion des',
+    accounts_span: 'Comptes',
+    new_account: '＋ Nouveau Compte',
+    accounts_list: 'Liste',
+    accounts_list_span: 'Complète',
+    dd_history_title: '📉 Historique DD',
+    dd_history_span: 'Journalier',
+    dd_sim_select: '— Choisir un compte —',
+    // Journal
+    journal_title: 'Trading',
+    journal_span: 'Journal',
+    new_trade: '＋ Nouveau Trade',
+    export_pdf: '📄 Exporter PDF',
+    all_accounts: 'Tous les comptes',
+    all_status: 'Tous statuts',
+    view_grid: '⊞ Grille',
+    view_list: '☰ Liste',
+    // Dashboard
+    dashboard_title: 'Trading',
+    dashboard_span: 'Dashboard',
+    perf_globale: 'PERFORMANCE GLOBALE',
+    statistiques: 'STATISTIQUES',
+    pnl_total_label: 'PNL total',
+    pnl_since: 'depuis le début',
+    pnl_monthly_label: 'PNL mensuel',
+    pnl_weekly_label: 'PNL hebdo',
+    pnl_weekly_sub: 'semaine en cours',
+    pnl_daily_label: 'PNL du jour',
+    pnl_daily_sub: "aujourd'hui",
+    winrate_label: 'Win rate',
+    avgwin_label: 'Avg win',
+    avgwin_sub: 'par trade gagnant',
+    avgloss_label: 'Avg loss',
+    avgloss_sub: 'par trade perdant',
+    total_trades_label: 'Total trades',
+    total_trades_sub: 'toutes positions',
+    best_day_label: 'Meilleur jour',
+    worst_day_label: 'Pire jour',
+    trade_days_label: 'Jours tradés',
+    trade_days_sub: 'jours distincts avec au moins 1 trade',
+    equity_curve: 'Equity curve',
+    pnl_cumule: 'PNL cumulé ($)',
+    summary_title: 'Résumé',
+    summary_span: 'Comptes',
+    // Weekly
+    weekly_title: 'Rapport',
+    weekly_span: 'Hebdomadaire',
+    perf_jour_title: 'Performance par',
+    perf_jour_span: 'Jour',
+    trades_semaine_title: 'Trades de la',
+    trades_semaine_span: 'Semaine',
+    // Modals
+    save_btn: '💾 Sauvegarder',
+    cancel_btn: 'Annuler',
+    close_btn: 'Fermer',
+    // Account modal
+    acc_modal_new: 'Nouveau Compte',
+    acc_modal_edit: 'Modifier Compte',
+    acc_name_label: 'Nom du Compte',
+    acc_firm_label: 'Propfirm',
+    acc_size_label: 'Taille du Compte $',
+    acc_obj_label: 'Objectif $',
+    acc_dd_label: 'Drawdown Max $ (EOD)',
+    acc_dd_type_label: 'Type de DD',
+    acc_daily_label: 'Daily Loss $',
+    acc_consist_label: 'Consistency %',
+    acc_type_label: 'Type de compte',
+    acc_status_label: 'Statut',
+    acc_start_label: 'Date de Démarrage',
+    dd_trailing: 'EOD Trailing',
+    dd_static: 'Statique',
+    acc_evaluation: 'Évaluation',
+    acc_funded: 'Financé',
+    status_actif: 'actif',
+    status_passe: 'passé',
+    status_attente: 'en attente',
+    status_echoue: 'échoué',
+    // Trade modal
+    trade_modal_new: 'Nouveau Trade',
+    trade_modal_edit: 'Modifier Trade',
+    mode_single: '👤 Compte unique',
+    mode_multi: '👥 Multi-comptes (copieur)',
+    date_label: 'Date',
+    instrument_label: 'Instrument',
+    position_label: 'Position',
+    contracts_label: 'Contrats (qty)',
+    entry_label: 'Entrée (prix)',
+    sl_label: 'Stop Loss (pts)',
+    tp_label: 'Take Profit (pts)',
+    exit_label: 'Sortie (prix)',
+    status_label: 'Statut',
+    // Filter labels
+    vue_label: 'Vue :',
+    filter_all: 'Tous',
+    filter_eval: 'Évaluation',
+    filter_funded: 'Financé',
+    // Export
+    export_title: '📄 Exporter Journal en PDF',
+    export_period: 'Période',
+    by_month: 'Par mois',
+    by_week: 'Par semaine',
+    month_label: 'Mois',
+    week_ref_label: 'Mois de référence',
+    week_label: 'Semaine',
+    generate_pdf: '📥 Générer PDF',
+    // Password
+    pwd_title: '🔐 Accès Journal',
+    pwd_label: 'Mot de passe',
+    pwd_confirm_btn: '✅ Confirmer',
+    pwd_change_title: '⚙️ Changer le mot de passe',
+    pwd_old_label: 'Mot de passe actuel',
+    pwd_new_label: 'Nouveau mot de passe',
+    pwd_confirm_label: 'Confirmer le nouveau',
+    // Table headers
+    th_account: 'Compte', th_propfirm: 'Propfirm', th_size: 'Taille',
+    th_objective: 'Objectif $', th_dd: 'DD Max $', th_daily: 'Daily Loss $',
+    th_consistency: 'Consistency %', th_status: 'Statut', th_pnl: 'PNL Total $',
+    th_start: 'Démarrage', th_floor: 'Floor DD $', th_consumed: 'DD Consommé $',
+    th_remaining: 'DD Restant $', th_to_obj: 'Reste Obj. $', th_actions: 'Actions',
+    th_date: 'Date', th_balance_init: 'Bal. Init $', th_instrument: 'Instrument',
+    th_position: 'Position', th_contracts: 'Contrats', th_entry: 'Entrée',
+    th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Sortie', th_pnl_pts: 'PnL pts',
+    th_pnl_net: 'PnL NET $', th_balance_final: 'Balance finale $',
+    th_day: 'Jour', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
+    th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
+    // Share
+    share_title: '🔗 Partager — Lecture Seule',
+    share_account_label: 'Compte à partager',
+    share_expiry_label: 'Expiration du lien',
+    share_btn: '⚡ Générer le lien de partage',
+    share_active: 'Liens actifs',
+    share_generated: 'Lien généré',
+    share_copy: '📋 Copier',
+    th_obj_pct: 'Objectif %',
+    // DD History
+    dd_type_label: 'Type',
+    dd_eod_label: 'EOD DD',
+    dd_floor_label: 'Floor actuel',
+    dd_balance_label: 'Balance actuelle',
+    dd_consumed_label: 'DD Consommé',
+    dd_remaining_label: 'DD Restant',
+    dd_to_obj_label: 'Reste Objectif',
+    // Calendar
+    no_data_cal: 'Aucun trade',
+    // Statut DD
+    dd_intact: '✅ INTACT',
+    dd_used: '⚡ UTILISÉ',
+    dd_danger: '⚠️ DANGER',
+    dd_blown: '💀 BLOWN',
+    // Weekly strip
+    ws_total: 'Total Trades',
+    ws_wins: 'Gagnants',
+    ws_losses: 'Perdants',
+    ws_wr: 'Win Rate',
+    ws_pnl: 'PnL Net Semaine',
+    ws_firm: 'Propfirm',
+    // Account card
+    floor_dd: 'Floor DD',
+    balance_label: 'Balance',
+    to_obj: 'Reste Objectif',
+    taille: 'Taille',
+    objectif: 'Objectif',
+    eod_dd: 'EOD DD',
+    // Misc
+    confirm_delete_account: 'Supprimer ce compte ? Tous les trades associés seront également supprimés.',
+    confirm_delete_trade: 'Supprimer ce trade ?',
+    no_account: '-- Choisir --',
+    no_data: 'Aucune donnée',
+    no_trades: 'Aucun trade enregistré',
+    select_month: 'Sélectionnez un mois pour voir le calendrier',
+    today: 'Début',
+    current_week: 'Semaine actuelle',
+    // Table headers (missing)
+    th_actions: 'Actions', th_balance_final: 'Bal. Finale $', th_balance_init: 'Bal. Init $',
+    th_consumed: 'DD Consommé $', th_contracts: 'Contrats', th_dd: 'DD Max $',
+    th_entry: 'Entrée', th_exit: 'Sortie', th_floor: 'Floor DD $',
+    th_instrument: 'Instrument', th_losses: 'Loss', th_losspct: 'Loss %',
+    th_pnl: 'PNL Total $', th_pnl_pts: 'PnL pts', th_pnlnet: 'PnL net $',
+    th_propfirm: 'Propfirm', th_size: 'Taille', th_status: 'Statut',
+    th_to_obj: 'Reste Obj. $', th_tp: 'TP pts', th_trades: 'Trades',
+    th_winpct: 'Win %', th_wins: 'Wins',
+    // Select options
+    select_account_prompt: 'Sélectionner un compte…',
+    choose_week: '— Choisir une semaine —',
+    // Days of week
+    day_mon: 'Lundi', day_tue: 'Mardi', day_wed: 'Mercredi', day_thu: 'Jeudi', day_fri: 'Vendredi',
+    day_sun_s: 'Dim', day_mon_s: 'Lun', day_tue_s: 'Mar', day_wed_s: 'Mer', day_thu_s: 'Jeu', day_fri_s: 'Ven', day_sat_s: 'Sam',
+    // Extra UI
+    share_btn_short: 'Partager',
+    no_trades_week: 'Aucun trade cette semaine',
+    select_account_dd: "Sélectionnez un compte pour voir l'historique DD",
+    dd_sim_select_prompt: 'Sélectionnez un compte',
+    th_pnl_jour: 'PNL Jour $',
+    th_highwater: 'High-Water $',
+    th_dd_status: 'Statut DD',
+    dd_history_title_text: 'Historique DD',
+    accounts_list_full: 'Liste Complète',
+  },
+  en: {
+    autosave: 'AUTO-SAVE ON',
+    tab_accounts: 'Accounts',
+    tab_journal: 'Journal',
+    tab_dashboard: 'Dashboard',
+    tab_weekly: 'Weekly Report',
+    // Accounts
+    accounts_title: 'Account',
+    accounts_span: 'Management',
+    new_account: '＋ New Account',
+    accounts_list: 'Full',
+    accounts_list_span: 'List',
+    dd_history_title: '📉 DD History',
+    dd_history_span: 'Daily',
+    dd_sim_select: '— Select an account —',
+    // Journal
+    journal_title: 'Trading',
+    journal_span: 'Journal',
+    new_trade: '＋ New Trade',
+    export_pdf: '📄 Export PDF',
+    all_accounts: 'All accounts',
+    all_status: 'All statuses',
+    view_grid: '⊞ Grid',
+    view_list: '☰ List',
+    // Dashboard
+    dashboard_title: 'Trading',
+    dashboard_span: 'Dashboard',
+    perf_globale: 'GLOBAL PERFORMANCE',
+    statistiques: 'STATISTICS',
+    pnl_total_label: 'Total PNL',
+    pnl_since: 'since the start',
+    pnl_monthly_label: 'Monthly PNL',
+    pnl_weekly_label: 'Weekly PNL',
+    pnl_weekly_sub: 'current week',
+    pnl_daily_label: 'Daily PNL',
+    pnl_daily_sub: 'today',
+    winrate_label: 'Win rate',
+    avgwin_label: 'Avg win',
+    avgwin_sub: 'per winning trade',
+    avgloss_label: 'Avg loss',
+    avgloss_sub: 'per losing trade',
+    total_trades_label: 'Total trades',
+    total_trades_sub: 'all positions',
+    best_day_label: 'Best day',
+    worst_day_label: 'Worst day',
+    trade_days_label: 'Trading days',
+    trade_days_sub: 'distinct days with at least 1 trade',
+    equity_curve: 'Equity curve',
+    pnl_cumule: 'Cumulative PNL ($)',
+    summary_title: 'Account',
+    summary_span: 'Summary',
+    // Weekly
+    weekly_title: 'Weekly',
+    weekly_span: 'Report',
+    perf_jour_title: 'Performance by',
+    perf_jour_span: 'Day',
+    trades_semaine_title: 'Trades of the',
+    trades_semaine_span: 'Week',
+    // Modals
+    save_btn: '💾 Save',
+    cancel_btn: 'Cancel',
+    close_btn: 'Close',
+    // Account modal
+    acc_modal_new: 'New Account',
+    acc_modal_edit: 'Edit Account',
+    acc_name_label: 'Account Name',
+    acc_firm_label: 'Prop Firm',
+    acc_size_label: 'Account Size $',
+    acc_obj_label: 'Objective $',
+    acc_dd_label: 'Max Drawdown $ (EOD)',
+    acc_dd_type_label: 'DD Type',
+    acc_daily_label: 'Daily Loss $',
+    acc_consist_label: 'Consistency %',
+    acc_type_label: 'Account type',
+    acc_status_label: 'Status',
+    acc_start_label: 'Start Date',
+    dd_trailing: 'EOD Trailing',
+    dd_static: 'Static',
+    acc_evaluation: 'Evaluation',
+    acc_funded: 'Funded',
+    status_actif: 'active',
+    status_passe: 'past',
+    status_attente: 'pending',
+    status_echoue: 'failed',
+    // Trade modal
+    trade_modal_new: 'New Trade',
+    trade_modal_edit: 'Edit Trade',
+    mode_single: '👤 Single account',
+    mode_multi: '👥 Multi-account (copier)',
+    date_label: 'Date',
+    instrument_label: 'Instrument',
+    position_label: 'Position',
+    contracts_label: 'Contracts (qty)',
+    entry_label: 'Entry (price)',
+    sl_label: 'Stop Loss (pts)',
+    tp_label: 'Take Profit (pts)',
+    exit_label: 'Exit (price)',
+    status_label: 'Status',
+    // Filter labels
+    vue_label: 'View:',
+    filter_all: 'All',
+    filter_eval: 'Evaluation',
+    filter_funded: 'Funded',
+    // Export
+    export_title: '📄 Export Journal to PDF',
+    export_period: 'Period',
+    by_month: 'By month',
+    by_week: 'By week',
+    month_label: 'Month',
+    week_ref_label: 'Reference month',
+    week_label: 'Week',
+    generate_pdf: '📥 Generate PDF',
+    // Password
+    pwd_title: '🔐 Journal Access',
+    pwd_label: 'Password',
+    pwd_confirm_btn: '✅ Confirm',
+    pwd_change_title: '⚙️ Change password',
+    pwd_old_label: 'Current password',
+    pwd_new_label: 'New password',
+    pwd_confirm_label: 'Confirm new password',
+    // Table headers
+    th_account: 'Account', th_propfirm: 'Prop Firm', th_size: 'Size',
+    th_objective: 'Objective $', th_dd: 'DD Max $', th_daily: 'Daily Loss $',
+    th_consistency: 'Consistency %', th_status: 'Status', th_pnl: 'Total PNL $',
+    th_start: 'Start', th_floor: 'DD Floor $', th_consumed: 'DD Used $',
+    th_remaining: 'DD Left $', th_to_obj: 'To Obj. $', th_actions: 'Actions',
+    th_date: 'Date', th_balance_init: 'Init Bal. $', th_instrument: 'Instrument',
+    th_position: 'Position', th_contracts: 'Contracts', th_entry: 'Entry',
+    th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Exit', th_pnl_pts: 'PnL pts',
+    th_pnl_net: 'PnL NET $', th_balance_final: 'Final Balance $',
+    th_day: 'Day', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
+    th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
+    // Share
+    share_title: '🔗 Share — Read Only',
+    share_account_label: 'Account to share',
+    share_expiry_label: 'Link expiration',
+    share_btn: '⚡ Generate share link',
+    share_active: 'Active links',
+    share_generated: 'Generated link',
+    share_copy: '📋 Copy',
+    th_obj_pct: 'Objective %',
+    // DD History
+    dd_type_label: 'Type',
+    dd_eod_label: 'EOD DD',
+    dd_floor_label: 'Current floor',
+    dd_balance_label: 'Current balance',
+    dd_consumed_label: 'DD Used',
+    dd_remaining_label: 'DD Left',
+    dd_to_obj_label: 'To Objective',
+    // Calendar
+    no_data_cal: 'No trades',
+    // DD Status
+    dd_intact: '✅ INTACT',
+    dd_used: '⚡ USED',
+    dd_danger: '⚠️ DANGER',
+    dd_blown: '💀 BLOWN',
+    // Weekly strip
+    ws_total: 'Total Trades',
+    ws_wins: 'Winners',
+    ws_losses: 'Losers',
+    ws_wr: 'Win Rate',
+    ws_pnl: 'Weekly Net PnL',
+    ws_firm: 'Prop Firm',
+    // Account card
+    floor_dd: 'DD Floor',
+    balance_label: 'Balance',
+    to_obj: 'To Objective',
+    taille: 'Size',
+    objectif: 'Objective',
+    eod_dd: 'EOD DD',
+    // Misc
+    confirm_delete_account: 'Delete this account? All associated trades will also be deleted.',
+    confirm_delete_trade: 'Delete this trade?',
+    no_account: '-- Choose --',
+    no_data: 'No data',
+    no_trades: 'No trades recorded',
+    select_month: 'Select a month to view the calendar',
+    today: 'Start',
+    current_week: 'Current week',
+    // Table headers (missing)
+    th_actions: 'Actions', th_balance_final: 'Final Bal. $', th_balance_init: 'Init Bal. $',
+    th_consumed: 'DD Used $', th_contracts: 'Contracts', th_dd: 'DD Max $',
+    th_entry: 'Entry', th_exit: 'Exit', th_floor: 'DD Floor $',
+    th_instrument: 'Instrument', th_losses: 'Loss', th_losspct: 'Loss %',
+    th_pnl: 'Total PNL $', th_pnl_pts: 'PnL pts', th_pnlnet: 'PnL net $',
+    th_propfirm: 'Prop Firm', th_size: 'Size', th_status: 'Status',
+    th_to_obj: 'To Obj. $', th_tp: 'TP pts', th_trades: 'Trades',
+    th_winpct: 'Win %', th_wins: 'Wins',
+    // Select options
+    select_account_prompt: 'Select an account…',
+    choose_week: '— Choose a week —',
+    // Days of week
+    day_mon: 'Monday', day_tue: 'Tuesday', day_wed: 'Wednesday', day_thu: 'Thursday', day_fri: 'Friday',
+    day_sun_s: 'Sun', day_mon_s: 'Mon', day_tue_s: 'Tue', day_wed_s: 'Wed', day_thu_s: 'Thu', day_fri_s: 'Fri', day_sat_s: 'Sat',
+    // Extra UI
+    share_btn_short: 'Share',
+    no_trades_week: 'No trades this week',
+    select_account_dd: 'Select an account to view DD history',
+    dd_sim_select_prompt: 'Select an account',
+    th_pnl_jour: 'PNL Day $',
+    th_highwater: 'High-Water $',
+    th_dd_status: 'DD Status',
+    dd_history_title_text: 'DD History',
+    accounts_list_full: 'Full List',
+  }
+};
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) ||
+         (TRANSLATIONS['fr'][key]) || key;
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'fr' ? 'en' : 'fr';
+  localStorage.setItem('qh_lang', currentLang);
+  applyTranslations();
+}
+
+function applyTranslations() {
+  // Update flag button — show the OTHER language (to switch to)
+  const flagEl  = document.getElementById('lang-flag');
+  const labelEl = document.getElementById('lang-label');
+  if (flagEl)  flagEl.textContent  = currentLang === 'fr' ? '🇬🇧' : '🇫🇷';
+  if (labelEl) labelEl.textContent = currentLang === 'fr' ? 'EN'   : 'FR';
+
+  // Update all data-i18n elements (including options)
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (el.tagName === 'OPTION') {
+      el.text  = val;
+      // Keep original value if it was a locale word, map to canonical
+      if (!el.value) el.value = '';
+    } else {
+      el.textContent = val;
+    }
+  });
+
+  // Update placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+
+  // Re-render all dynamic content
+  populateAccountSelects();
+  renderAccounts();
+  renderJournal();
+  renderDDHistory();
+  renderDashboard();
+  renderWeekly();
+  updateClock();
+}
+
+/* ─── SUPABASE INTEGRATION ─── */
+let supabaseClient = null;
+let userSession = null;
+
+function initSupabase() {
+  const sbUrl = localStorage.getItem('qh_sb_url');
+  const sbKey = localStorage.getItem('qh_sb_key');
+  if (sbUrl && sbKey && window.supabase) {
+    try {
+      supabaseClient = window.supabase.createClient(sbUrl, sbKey, {
+        auth: { persistSession: true }
+      });
+      
+      // Get current session
+      supabaseClient.auth.getSession().then(({ data: { session } }) => {
+        userSession = session;
+        updateCloudUI();
+        if (session) {
+          syncAndLoadData();
+        }
+      });
+      
+      // Listen to auth changes
+      supabaseClient.auth.onAuthStateChange((event, session) => {
+        userSession = session;
+        updateCloudUI();
+        if (event === 'SIGNED_IN') {
+          syncAndLoadData();
+        } else if (event === 'SIGNED_OUT') {
+          userSession = null;
+          load();
+          applyTranslations();
+          showToast(currentLang === 'fr' ? 'Déconnecté du Cloud' : 'Disconnected from Cloud');
+        }
+      });
+    } catch (e) {
+      console.error("Failed to initialize Supabase:", e);
+    }
+  }
+}
+
+function updateCloudUI() {
+  const iconEl = document.getElementById('cloud-status-icon');
+  const labelEl = document.getElementById('cloud-status-label');
+  const btnEl = document.getElementById('cloud-btn');
+  if (!iconEl || !labelEl) return;
+  
+  const sbUrl = localStorage.getItem('qh_sb_url');
+  if (!sbUrl) {
+    iconEl.textContent = '☁️';
+    labelEl.textContent = currentLang === 'fr' ? 'Configuration Cloud' : 'Cloud Setup';
+    if (btnEl) btnEl.style.borderColor = 'var(--border2)';
+  } else if (!userSession) {
+    iconEl.textContent = '🔑';
+    labelEl.textContent = currentLang === 'fr' ? 'Connexion' : 'Login';
+    if (btnEl) btnEl.style.borderColor = 'var(--gold)';
+  } else {
+    iconEl.textContent = '🟢';
+    const email = userSession.user.email;
+    labelEl.textContent = email.split('@')[0];
+    if (btnEl) btnEl.style.borderColor = 'var(--green)';
+  }
+}
+
+async function syncAndLoadData() {
+  if (!supabaseClient || !userSession) return;
+  
+  showToast(currentLang === 'fr' ? 'Chargement des données Cloud...' : 'Loading Cloud data...');
+  
+  try {
+    const { data: cloudAccounts, error: accError } = await supabaseClient
+      .from('accounts')
+      .select('*')
+      .order('created_at', { ascending: true });
+      
+    if (accError) throw accError;
+    
+    const { data: cloudTrades, error: tradeError } = await supabaseClient
+      .from('trades')
+      .select('*')
+      .order('created_at', { ascending: true });
+      
+    if (tradeError) throw tradeError;
+    
+    const { data: cloudShares, error: shareError } = await supabaseClient
+      .from('share_links')
+      .select('*');
+      
+    if (shareError) throw shareError;
+    
+    if (cloudAccounts.length === 0 && cloudTrades.length === 0 && (accounts.length > 0 || trades.length > 0)) {
+      const confirmSync = confirm(currentLang === 'fr' 
+        ? "Votre base Cloud est vide mais vous avez des données locales. Voulez-vous envoyer vos données locales vers le Cloud ?"
+        : "Your Cloud database is empty but you have local data. Do you want to sync your current local data to the Cloud?");
+        
+      if (confirmSync) {
+        await syncLocalToCloud();
+        return;
+      }
+    }
+    
+    accounts = cloudAccounts.map(a => ({
+      id: a.id,
+      name: a.name,
+      firm: a.firm,
+      size: parseFloat(a.size),
+      objective: a.objective ? parseFloat(a.objective) : 0,
+      dd: parseFloat(a.dd),
+      ddType: a.dd_type || 'trailing',
+      daily: a.daily_loss ? parseFloat(a.daily_loss) : 0,
+      consistency: a.consistency ? parseFloat(a.consistency) : 0,
+      accountType: a.type,
+      status: a.status,
+      start: a.start_date
+    }));
+    
+    trades = cloudTrades.map(t => ({
+      id: t.id,
+      account: t.account,
+      firm: t.firm || '',
+      balanceInit: t.balance_init ? parseFloat(t.balance_init) : 0,
+      balanceFinal: t.balance_final ? parseFloat(t.balance_final) : 0,
+      date: t.date,
+      instrument: t.instrument,
+      side: t.side,
+      qty: parseInt(t.qty),
+      entry: t.entry ? parseFloat(t.entry) : null,
+      sl: t.sl ? parseFloat(t.sl) : null,
+      tp: t.tp ? parseFloat(t.tp) : null,
+      exit: t.exit ? parseFloat(t.exit) : null,
+      pnlPts: t.pnl_pts ? parseFloat(t.pnl_pts) : null,
+      pnlNet: parseFloat(t.pnl_net),
+      status: t.status
+    }));
+    
+    shareLinks = cloudShares.map(s => ({
+      token: s.token,
+      account: s.account,
+      expiresAt: parseInt(s.expires_at),
+      createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now()
+    }));
+    
+    populateAccountSelects();
+    renderAccounts();
+    renderJournal();
+    renderDDHistory();
+    renderDashboard();
+    renderWeekly();
+    
+    showToast(currentLang === 'fr' ? 'Synchronisation Cloud réussie !' : 'Cloud Synchronization successful!');
+  } catch (err) {
+    console.error("Sync and load failed:", err);
+    showToast(currentLang === 'fr' ? 'Erreur de synchronisation Cloud' : 'Cloud Synchronization error', 'error');
+  }
+}
+
+async function syncLocalToCloud() {
+  if (!supabaseClient || !userSession) return;
+  
+  showToast(currentLang === 'fr' ? 'Envoi des données locales vers le Cloud...' : 'Uploading local data to the Cloud...');
+  
+  try {
+    const userId = userSession.user.id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    await supabaseClient.from('accounts').delete().eq('user_id', userId);
+    await supabaseClient.from('trades').delete().eq('user_id', userId);
+    await supabaseClient.from('share_links').delete().eq('user_id', userId);
+    
+    if (accounts.length > 0) {
+      const accountsToInsert = accounts.map(a => {
+        const item = {
+          user_id: userId,
+          name: a.name,
+          firm: a.firm || '',
+          size: a.size || 0,
+          dd: a.dd || 0,
+          dd_type: a.ddType || 'trailing',
+          daily_loss: a.daily || 0,
+          consistency: a.consistency || 0,
+          type: a.accountType || 'evaluation',
+          status: a.status || 'actif',
+          start_date: a.start || null,
+          objective: a.objective || 0
+        };
+        if (a.id && uuidRegex.test(a.id)) {
+          item.id = a.id;
+        }
+        return item;
+      });
+      
+      const { error: accError } = await supabaseClient.from('accounts').insert(accountsToInsert);
+      if (accError) throw accError;
+    }
+    
+    if (trades.length > 0) {
+      const tradesToInsert = trades.map(t => {
+        const item = {
+          user_id: userId,
+          account: t.account,
+          date: t.date,
+          instrument: t.instrument,
+          side: t.side,
+          qty: t.qty,
+          entry: t.entry,
+          sl: t.sl,
+          tp: t.tp,
+          exit: t.exit,
+          pnl_pts: t.pnlPts,
+          pnl_net: t.pnlNet,
+          status: t.status,
+          firm: t.firm || '',
+          balance_init: t.balanceInit || 0,
+          balance_final: t.balanceFinal || 0
+        };
+        if (t.id && uuidRegex.test(t.id)) {
+          item.id = t.id;
+        }
+        return item;
+      });
+      
+      const { error: tradeError } = await supabaseClient.from('trades').insert(tradesToInsert);
+      if (tradeError) throw tradeError;
+    }
+    
+    if (shareLinks.length > 0) {
+      const sharesToInsert = shareLinks.map(s => ({
+        user_id: userId,
+        token: s.token,
+        account: s.account,
+        expires_at: s.expiresAt,
+        created_at: new Date(s.createdAt).toISOString()
+      }));
+      
+      const { error: shareError } = await supabaseClient.from('share_links').insert(sharesToInsert);
+      if (shareError) throw shareError;
+    }
+    
+    showToast(currentLang === 'fr' ? 'Données synchronisées avec succès !' : 'Data synchronized successfully!');
+    await syncAndLoadData();
+  } catch (err) {
+    console.error("Local sync upload failed:", err);
+    showToast(currentLang === 'fr' ? "Échec de l'envoi des données locales" : "Local data upload failed", 'error');
+  }
+}
+
+
+
+async function syncShareLinksToCloud() {
+  if (!supabaseClient || !userSession) return;
+  try {
+    const userId = userSession.user.id;
+    await supabaseClient.from('share_links').delete().eq('user_id', userId);
+    if (shareLinks.length > 0) {
+      const toInsert = shareLinks.map(s => ({
+        user_id: userId,
+        token: s.token,
+        account: s.account,
+        expires_at: s.expiresAt,
+        created_at: new Date(s.createdAt).toISOString()
+      }));
+      await supabaseClient.from('share_links').insert(toInsert);
+    }
+  } catch (e) {
+    console.error("Failed to sync share links to cloud:", e);
+  }
+}
+
+function openCloudModal() {
+  const sbUrl = localStorage.getItem('qh_sb_url') || '';
+  const sbKey = localStorage.getItem('qh_sb_key') || '';
+  
+  document.getElementById('sb-url-input').value = sbUrl;
+  document.getElementById('sb-key-input').value = sbKey;
+  
+  const configSection = document.getElementById('cloud-config-section');
+  const authSection = document.getElementById('cloud-auth-section');
+  const loggedOutUi = document.getElementById('cloud-logged-out-ui');
+  const loggedInUi = document.getElementById('cloud-logged-in-ui');
+  
+  if (sbUrl && sbKey) {
+    configSection.style.display = 'none';
+    authSection.style.display = 'block';
+    if (userSession) {
+      loggedOutUi.style.display = 'none';
+      loggedInUi.style.display = 'block';
+      document.getElementById('cloud-user-email').textContent = userSession.user.email;
+    } else {
+      loggedOutUi.style.display = 'block';
+      loggedInUi.style.display = 'none';
+    }
+  } else {
+    configSection.style.display = 'block';
+    authSection.style.display = 'none';
+  }
+  
+  openModal('cloud-modal');
+}
+
+function saveCloudConfig() {
+  const url = document.getElementById('sb-url-input').value.trim();
+  const key = document.getElementById('sb-key-input').value.trim();
+  
+  if (!url || !key) {
+    showToast(currentLang === 'fr' ? 'Veuillez remplir tous les champs' : 'Please fill all fields', 'error');
+    return;
+  }
+  
+  localStorage.setItem('qh_sb_url', url);
+  localStorage.setItem('qh_sb_key', key);
+  showToast(currentLang === 'fr' ? 'Configuration de la base enregistrée !' : 'Database configuration saved!');
+  
+  initSupabase();
+  openCloudModal();
+}
+
+function clearCloudConfig() {
+  if (confirm(currentLang === 'fr' 
+    ? "Voulez-vous réinitialiser la configuration Supabase ? Vous serez déconnecté du Cloud."
+    : "Do you want to reset the Supabase configuration? You will be logged out of the Cloud.")) {
+    
+    if (supabaseClient) {
+      supabaseClient.auth.signOut();
+    }
+    localStorage.removeItem('qh_sb_url');
+    localStorage.removeItem('qh_sb_key');
+    supabaseClient = null;
+    userSession = null;
+    updateCloudUI();
+    openCloudModal();
+  }
+}
+
+async function handleCloudLogin() {
+  const email = document.getElementById('sb-email').value.trim();
+  const pwd = document.getElementById('sb-pwd').value;
+  
+  if (!email || !pwd) {
+    showToast(currentLang === 'fr' ? 'Email et mot de passe requis' : 'Email and password required', 'error');
+    return;
+  }
+  
+  showToast(currentLang === 'fr' ? 'Connexion en cours...' : 'Connecting...');
+  
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: email,
+      password: pwd
+    });
+    
+    if (error) throw error;
+    showToast(currentLang === 'fr' ? 'Connexion réussie !' : 'Login successful!');
+    openCloudModal();
+  } catch (err) {
+    console.error("Login failed:", err);
+    showToast(currentLang === 'fr' ? 'Échec de la connexion : ' + err.message : 'Login failed: ' + err.message, 'error');
+  }
+}
+
+async function handleCloudSignup() {
+  const email = document.getElementById('sb-email').value.trim();
+  const pwd = document.getElementById('sb-pwd').value;
+  
+  if (!email || !pwd) {
+    showToast(currentLang === 'fr' ? 'Email et mot de passe requis' : 'Email and password required', 'error');
+    return;
+  }
+  
+  if (pwd.length < 6) {
+    showToast(currentLang === 'fr' ? 'Le mot de passe doit faire au moins 6 caractères' : 'Password must be at least 6 characters', 'error');
+    return;
+  }
+  
+  showToast(currentLang === 'fr' ? 'Création du compte...' : 'Creating account...');
+  
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email: email,
+      password: pwd
+    });
+    
+    if (error) throw error;
+    
+    if (data.session) {
+      showToast(currentLang === 'fr' ? 'Compte créé et connecté !' : 'Account created and logged in!');
+    } else {
+      showToast(currentLang === 'fr' ? 'Compte créé ! Veuillez vérifier votre email pour valider.' : 'Account created! Please check your email for validation.');
+    }
+    openCloudModal();
+  } catch (err) {
+    console.error("Signup failed:", err);
+    showToast(currentLang === 'fr' ? "Échec de l'inscription : " + err.message : 'Signup failed: ' + err.message, 'error');
+  }
+}
+
+async function handleCloudLogout() {
+  if (confirm(currentLang === 'fr' ? 'Voulez-vous vous déconnecter du Cloud ?' : 'Do you want to log out of the Cloud?')) {
+    if (supabaseClient) {
+      await supabaseClient.auth.signOut();
+    }
+    closeModal('cloud-modal');
+  }
+}
+
 /* ─── INIT ─── */
 load();
 populateAccountSelects();
@@ -1970,30 +3961,116 @@ renderJournal();
 
 // Set month filter default
 document.getElementById('journal-filter-month').value = new Date().toISOString().slice(0,7);
+
+// Apply language on load
+applyTranslations();
+
+// Init Supabase if configured
+initSupabase();
 </script>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL — CONFIGURATION ET SYNCHRONISATION CLOUD (SUPABASE) -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="cloud-modal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-title">☁️ Espace Synchronisation Cloud</div>
+    
+    <!-- Zone de configuration de la DB -->
+    <div id="cloud-config-section">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
+        Pour synchroniser vos données sur tous vos appareils, configurez votre base de données Supabase gratuite ci-dessous. Vos clés restent stockées de manière strictement locale et confidentielle.
+      </p>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label">URL du projet Supabase</label>
+        <input type="text" id="sb-url-input" class="form-control" placeholder="https://xxxx.supabase.co">
+      </div>
+      <div class="form-group" style="margin-bottom:18px;">
+        <label class="form-label">Clé publique Supabase (Anon Key)</label>
+        <input type="password" id="sb-key-input" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+      <button class="btn btn-primary" onclick="saveCloudConfig()" style="width:100%;justify-content:center;padding:10px 0;margin-bottom:20px;">
+        💾 Enregistrer la configuration
+      </button>
+    </div>
+
+    <!-- Zone d'authentification (visible uniquement si configuré) -->
+    <div id="cloud-auth-section" style="display:none;border-top:1px solid var(--border);padding-top:16px;">
+      <!-- Pas connecté -->
+      <div id="cloud-logged-out-ui">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;" id="cloud-auth-desc">
+          Connectez-vous à votre compte ou créez-en un nouveau en 3 secondes pour activer la synchronisation automatique en temps réel.
+        </p>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">Adresse Email</label>
+          <input type="email" id="sb-email" class="form-control" placeholder="email@exemple.com">
+        </div>
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label">Mot de passe</label>
+          <input type="password" id="sb-pwd" class="form-control" placeholder="••••••••">
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="handleCloudLogin()" style="flex:1;justify-content:center;padding:10px 0;">
+            🔑 Se connecter
+          </button>
+          <button class="btn btn-secondary" onclick="handleCloudSignup()" style="flex:1;justify-content:center;padding:10px 0;">
+            ＋ Créer un compte
+          </button>
+        </div>
+      </div>
+
+      <!-- Connecté -->
+      <div id="cloud-logged-in-ui" style="display:none;text-align:center;padding:10px 0;">
+        <div style="font-size:40px;margin-bottom:10px;">🟢</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;" id="cloud-user-email">email@exemple.com</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:20px;" id="cloud-sync-status">Synchronisation en temps réel active</div>
+        
+        <div style="display:flex;gap:10px;flex-direction:column;">
+          <button class="btn btn-primary" onclick="syncLocalToCloud()" style="width:100%;justify-content:center;padding:10px 0;">
+            📤 Forcer l'envoi vers le Cloud (Upload)
+          </button>
+          <button class="btn btn-secondary" onclick="syncAndLoadData()" style="width:100%;justify-content:center;padding:10px 0;">
+            📥 Forcer la lecture du Cloud (Download)
+          </button>
+          <button class="btn btn-danger" onclick="handleCloudLogout()" style="width:100%;justify-content:center;padding:10px 0;margin-top:10px;">
+            🚫 Se déconnecter de ce compte
+          </button>
+        </div>
+      </div>
+      
+      <button class="btn btn-danger btn-sm" onclick="clearCloudConfig()" style="width:100%;justify-content:center;padding:6px 0;margin-top:20px;background:none;border:none;">
+        ⚙️ Réinitialiser/Changer de projet Supabase
+      </button>
+    </div>
+
+    <div class="form-actions" style="margin-top:20px;">
+      <button class="btn btn-secondary" onclick="closeModal('cloud-modal')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- MODAL — PARTAGE READ-ONLY -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="share-modal">
   <div class="modal" style="max-width:580px;">
-    <div class="modal-title">🔗 Partager — Lecture Seule</div>
+    <div class="modal-title" data-i18n="share_title">🔗 Partager — Lecture Seule</div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6;">
       Générez un lien pour un compte spécifique. Le destinataire verra uniquement le dashboard de ce compte — aucune modification possible.
     </p>
 
     <div class="form-group" style="margin-bottom:14px;">
-      <label class="form-label">Compte à partager</label>
+      <label class="form-label" data-i18n="share_account_label">Compte à partager</label>
       <select class="form-control" id="share-account-select">
         <option value="">-- Choisir un compte --</option>
       </select>
     </div>
 
     <div class="form-group" style="margin-bottom:20px;">
-      <label class="form-label">Expiration du lien</label>
+      <label class="form-label" data-i18n="share_expiry_label">Expiration du lien</label>
       <select class="form-control" id="share-expiry">
         <option value="0">Jamais</option>
         <option value="1">1 jour</option>
@@ -2002,14 +4079,14 @@ document.getElementById('journal-filter-month').value = new Date().toISOString()
       </select>
     </div>
 
-    <button class="btn btn-primary" onclick="generateShareLink()" style="width:100%;justify-content:center;padding:12px 0;">
+    <button class="btn btn-primary" onclick="generateShareLink()" style="width:100%;justify-content:center;padding:12px 0;" data-i18n="share_btn">
       ⚡ Générer le lien de partage
     </button>
 
     <!-- RESULT -->
     <div id="share-result" style="display:none;margin-top:20px;">
       <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);padding:16px;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Lien généré</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;" data-i18n="share_generated">Lien généré</div>
         <div style="display:flex;gap:8px;align-items:center;">
           <input id="share-link-input" class="form-control" readonly style="font-size:11px;flex:1;background:var(--bg2);">
           <button class="btn btn-secondary btn-sm" onclick="copyShareLink()">📋 Copier</button>
@@ -2023,13 +4100,13 @@ document.getElementById('journal-filter-month').value = new Date().toISOString()
 
       <!-- ACTIVE LINKS -->
       <div style="margin-top:18px;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Liens actifs</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;" data-i18n="share_active">Liens actifs</div>
         <div id="share-links-list"></div>
       </div>
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-secondary" onclick="closeModal('share-modal')">Fermer</button>
+      <button class="btn btn-secondary" onclick="closeModal('share-modal')" data-i18n="close_btn">Fermer</button>
     </div>
   </div>
 </div>
@@ -2061,7 +4138,7 @@ document.getElementById('journal-filter-month').value = new Date().toISOString()
     <!-- PERFORMANCE GLOBALE -->
     <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">PERFORMANCE GLOBALE</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-      <div class="stat-card"><div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label">PNL total</span></div><div class="stat-value" id="ro-pnl-total">—</div><div class="stat-sub">depuis le début</div></div>
+      <div class="stat-card"><div class="stat-icon-row"><span class="stat-icon">↗</span><span class="stat-label">PNL total</span></div><div class="stat-value" id="ro-pnl-total">—</div><div class="stat-sub" data-i18n="pnl_since">depuis le début</div></div>
       <div class="stat-card"><div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label">PNL mensuel</span></div><div class="stat-value" id="ro-pnl-month">—</div><div class="stat-sub" id="ro-month-label">ce mois</div></div>
       <div class="stat-card"><div class="stat-icon-row"><span class="stat-icon">📅</span><span class="stat-label">PNL hebdo</span></div><div class="stat-value" id="ro-pnl-week">—</div><div class="stat-sub">semaine en cours</div></div>
       <div class="stat-card"><div class="stat-icon-row"><span class="stat-icon">☀️</span><span class="stat-label">PNL du jour</span></div><div class="stat-value" id="ro-pnl-day">—</div><div class="stat-sub">aujourd'hui</div></div>
@@ -2102,7 +4179,7 @@ document.getElementById('journal-filter-month').value = new Date().toISOString()
           </tr>
         </thead>
         <tbody id="ro-trades-tbody">
-          <tr><td colspan="10" class="empty-state">Aucun trade</td></tr>
+          <tr><td colspan="10" class="empty-state" data-i18n="no_data_cal">Aucun trade</td></tr>
         </tbody>
       </table>
     </div>
@@ -2121,7 +4198,32 @@ let roChart    = null;
 function loadShareLinks() {
   try { shareLinks = JSON.parse(localStorage.getItem('qh_shares')) || []; } catch { shareLinks = []; }
 }
-function saveShareLinks() { localStorage.setItem('qh_shares', JSON.stringify(shareLinks)); }
+async function syncShareLinksToCloud() {
+  if (!supabaseClient || !userSession) return;
+  try {
+    const userId = userSession.user.id;
+    await supabaseClient.from('share_links').delete().eq('user_id', userId);
+    if (shareLinks.length > 0) {
+      const toInsert = shareLinks.map(s => ({
+        user_id: userId,
+        token: s.token,
+        account: s.account,
+        expires_at: s.expiresAt,
+        created_at: new Date(s.createdAt).toISOString()
+      }));
+      await supabaseClient.from('share_links').insert(toInsert);
+    }
+  } catch (e) {
+    console.error("Failed to sync share links to cloud:", e);
+  }
+}
+
+function saveShareLinks() {
+  localStorage.setItem('qh_shares', JSON.stringify(shareLinks));
+  if (supabaseClient && userSession) {
+    syncShareLinksToCloud();
+  }
+}
 
 /* ─── OPEN SHARE MODAL ─── */
 function openShareModal() {
@@ -2184,7 +4286,7 @@ function renderShareLinksList() {
 
   const active = shareLinks.filter(l => l.expiresAt === 0 || l.expiresAt > now);
   if (!active.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">Aucun lien actif</div>';
+    list.innerHTML = `<div style="font-size:12px;color:var(--text3);">${currentLang==='en'?'No active links':'Aucun lien actif'}</div>`;
     return;
   }
   list.innerHTML = active.map(l => {
@@ -2310,7 +4412,7 @@ function renderReadOnly(snap) {
   };
 
   const mLabel = document.getElementById('ro-month-label');
-  if (mLabel) mLabel.textContent = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  if (mLabel) mLabel.textContent = new Date().toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
 
   set('ro-pnl-total', fmt$(total, true),   pnlClass(total));
   set('ro-pnl-month', fmt$(monthly, true), pnlClass(monthly));
@@ -2339,45 +4441,57 @@ function renderReadOnly(snap) {
   const sorted2 = [...data].sort((a, b) => a.date.localeCompare(b.date));
   const dMap2   = {};
   sorted2.forEach(t => { dMap2[t.date] = (dMap2[t.date] || 0) + t.pnlNet; });
-  const labels2 = Object.keys(dMap2).sort();
-  const vals2   = labels2.map(d => dMap2[d]);
+  const dateKeys2 = Object.keys(dMap2).sort();
+
+  const labels2 = dateKeys2.map(d => {
+    const dt = new Date(d + 'T00:00:00');
+    return dt.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short' });
+  });
+
   const cum2 = []; let c2 = 0;
-  vals2.forEach(v => { c2 += v; cum2.push(parseFloat(c2.toFixed(2))); });
+  dateKeys2.forEach(d => { c2 += dMap2[d]; cum2.push(parseFloat(c2.toFixed(2))); });
+
+  const finalLabels2     = cum2.length === 1 ? ['Début', ...labels2] : labels2;
+  const finalCumulative2 = cum2.length === 1 ? [0, ...cum2]          : cum2;
 
   const cvs = document.getElementById('ro-equity-chart');
   if (!cvs) return;
   const c2d = cvs.getContext('2d');
   if (roChart) roChart.destroy();
-  const g2 = c2d.createLinearGradient(0, 0, 0, 260);
-  g2.addColorStop(0, 'rgba(46,204,113,0.18)');
-  g2.addColorStop(1, 'rgba(46,204,113,0)');
+
+  const g2 = c2d.createLinearGradient(0, 0, 0, 300);
+  g2.addColorStop(0,   'rgba(46,204,113,0.22)');
+  g2.addColorStop(0.6, 'rgba(46,204,113,0.06)');
+  g2.addColorStop(1,   'rgba(46,204,113,0)');
 
   roChart = new Chart(c2d, {
     type: 'line',
-    data: { labels: labels2, datasets: [
-      { label: 'PNL cumulé $', data: cum2,
-        borderColor: '#2ecc71', backgroundColor: g2,
-        borderWidth: 2.5, pointRadius: 4,
-        pointBackgroundColor: '#2ecc71', pointBorderColor: '#1e1e1e', pointBorderWidth: 2,
-        tension: 0.4, fill: true },
-      { label: 'P&L Journalier $', data: vals2,
-        borderColor: 'rgba(79,142,247,0.5)', backgroundColor: 'transparent',
-        borderWidth: 1.5, pointRadius: 2, borderDash: [5, 4],
-        tension: 0.3, fill: false, yAxisID: 'y2' }
-    ]},
+    data: { labels: finalLabels2, datasets: [{
+      label: 'PNL cumulé $', data: finalCumulative2,
+      borderColor: '#2ecc71', backgroundColor: g2,
+      borderWidth: 2.5, pointRadius: 5, pointHoverRadius: 7,
+      pointBackgroundColor: '#2ecc71', pointBorderColor: '#1a1a1a', pointBorderWidth: 2,
+      tension: 0.35, fill: true, spanGaps: true,
+    }]},
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { intersect: false, mode: 'index' },
       plugins: {
-        legend: { labels: { color: '#666', font: { family: 'Inter', size: 11, weight: '500' } } },
-        tooltip: { backgroundColor: '#252525', borderColor: '#333', borderWidth: 1,
-          titleColor: '#f0f0f0', bodyColor: '#aaa', padding: 10,
-          callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y, true)}` } }
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e1e1e', borderColor: '#2ecc71', borderWidth: 1,
+          titleColor: '#f0f0f0', bodyColor: '#2ecc71', padding: 12, displayColors: false,
+          callbacks: {
+            title: items => items[0].label,
+            label: item => `PNL cumulé : ${fmt$(item.parsed.y, true)}`
+          }
+        }
       },
       scales: {
-        x:  { grid: { color: 'rgba(50,50,50,.8)' }, ticks: { color: '#555', font: { family: 'Inter', size: 10 }, maxRotation: 45 } },
-        y:  { position: 'left',  grid: { color: 'rgba(50,50,50,.8)' }, ticks: { color: '#666', font: { family: 'Inter', size: 10 }, callback: v => fmt$(v) } },
-        y2: { position: 'right', grid: { display: false }, ticks: { color: 'rgba(79,142,247,.5)', font: { family: 'Inter', size: 10 }, callback: v => fmt$(v) } }
+        x: { grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+             ticks: { color: '#666', font: { family: 'Inter', size: 11 }, maxRotation: 0, maxTicksLimit: 8 } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false }, beginAtZero: true,
+             ticks: { color: '#666', font: { family: 'Inter', size: 11 }, callback: v => '$' + v.toLocaleString('fr-FR') } }
       }
     }
   });
@@ -2386,7 +4500,7 @@ function renderReadOnly(snap) {
   const tbody = document.getElementById('ro-trades-tbody');
   if (!tbody) return;
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Aucun trade</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${t('no_data_cal')}</td></tr>`;
     return;
   }
   const sortedTr = [...data].sort((a, b) => b.date.localeCompare(a.date));
@@ -2402,6 +4516,354 @@ function renderReadOnly(snap) {
     <td>${badgeTrade(t.status)}</td>
     <td class="text-mono">${fmt$(t.balanceFinal)}</td>
   </tr>`).join('');
+}
+
+
+
+/* ─── EXPORT PDF ─── */
+function toggleExportPeriod() {
+  const type = document.getElementById('export-period-type').value;
+  document.getElementById('export-month-group').style.display = type === 'month' ? '' : 'none';
+  document.getElementById('export-week-group').style.display  = type === 'week'  ? '' : 'none';
+  if (type === 'week') populateWeekSelect();
+  updateExportPreview();
+}
+
+function getWeeksForMonth(yearMonth) {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const firstDay = new Date(y, m-1, 1);
+  const lastDay  = new Date(y, m, 0);
+  const weeks = [];
+  let mon = new Date(firstDay);
+  const dow = mon.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  mon.setDate(mon.getDate() + diff);
+  while (mon <= lastDay) {
+    const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+    const monStr = mon.toISOString().slice(0,10);
+    const friStr = fri.toISOString().slice(0,10);
+    const label  = `${mon.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{day:'numeric',month:'short'})} → ${fri.toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{day:'numeric',month:'short',year:'numeric'})}`;
+    weeks.push({ monStr, friStr, label });
+    mon = new Date(mon); mon.setDate(mon.getDate() + 7);
+  }
+  return weeks;
+}
+
+function populateWeekSelect() {
+  const month = document.getElementById('export-week-month').value;
+  const sel   = document.getElementById('export-week-select');
+  if (!month) { sel.innerHTML = '<option value="" data-i18n="choose_week">— Choisir une semaine —</option>'; return; }
+  const weeks = getWeeksForMonth(month);
+  sel.innerHTML = '<option value="" data-i18n="choose_week">— Choisir une semaine —</option>' +
+    weeks.map(w => `<option value="${w.monStr}|${w.friStr}">${w.label}</option>`).join('');
+  updateExportPreview();
+}
+
+function getExportDateRange() {
+  const type = document.getElementById('export-period-type').value;
+  if (type === 'month') {
+    const month = document.getElementById('export-month').value;
+    if (!month) return null;
+    const label = new Date(month+'-02').toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{month:'long',year:'numeric'});
+    return { type:'month', label, filter: t => t.date.startsWith(month) };
+  } else {
+    const val = document.getElementById('export-week-select').value;
+    if (!val) return null;
+    const [monStr, friStr] = val.split('|');
+    const mon = new Date(monStr+'T12:00:00');
+    const fri = new Date(friStr+'T12:00:00');
+    const label = currentLang === 'fr'
+      ? `Semaine du ${mon.toLocaleDateString('fr-FR',{day:'numeric',month:'long'})} au ${fri.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}`
+      : `Week of ${mon.toLocaleDateString('en-US',{month:'long',day:'numeric'})} to ${fri.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`;
+    return { type:'week', label, filter: t => t.date >= monStr && t.date <= friStr };
+  }
+}
+
+function openExportModal() {
+  const sel = document.getElementById('export-account');
+  const cur = document.getElementById('journal-filter-account').value;
+  sel.innerHTML = '<option value="">— Choisir un compte —</option>' +
+    accounts.map(a=>`<option value="${a.name}"${a.name===cur?' selected':''}>${a.name}${a.firm?' – '+a.firm:''}</option>`).join('');
+  const curMonth = document.getElementById('journal-filter-month').value || new Date().toISOString().slice(0,7);
+  document.getElementById('export-month').value      = curMonth;
+  document.getElementById('export-week-month').value = curMonth;
+  document.getElementById('export-period-type').value = 'month';
+  document.getElementById('export-error').textContent = '';
+  document.getElementById('export-preview').style.display = 'none';
+  toggleExportPeriod();
+  populateWeekSelect();
+  document.getElementById('export-account').onchange = updateExportPreview;
+  document.getElementById('export-month').onchange   = updateExportPreview;
+  document.getElementById('export-week-month').onchange = () => { populateWeekSelect(); updateExportPreview(); };
+  document.getElementById('export-week-select').onchange = updateExportPreview;
+  document.getElementById('export-period-type').onchange = () => { toggleExportPeriod(); updateExportPreview(); };
+  updateExportPreview();
+  openModal('export-modal');
+}
+
+function updateExportPreview() {
+  const accName = document.getElementById('export-account').value;
+  const range   = getExportDateRange();
+  const prev    = document.getElementById('export-preview');
+  const prevTxt = document.getElementById('export-preview-txt');
+  if (!accName || !range) { prev.style.display='none'; return; }
+  const filtered = trades.filter(t=>t.account===accName && range.filter(t));
+  const wins=filtered.filter(t=>t.status==='WIN').length;
+  const losses=filtered.filter(t=>t.status==='LOSS').length;
+  const be=filtered.filter(t=>t.status==='BE').length;
+  const pnl=filtered.reduce((s,t)=>s+(t.pnlNet||0),0);
+  const wr=filtered.length>0?((wins/filtered.length)*100).toFixed(0):0;
+  prev.style.display='block';
+  prevTxt.innerHTML=`<b style="color:var(--text)">${filtered.length} trade(s)</b> · WIN:<b style="color:var(--green)"> ${wins}</b> LOSS:<b style="color:var(--red)"> ${losses}</b> BE:<b style="color:var(--accent)"> ${be}</b> · PnL: <b style="color:${pnl>=0?'var(--green)':'var(--red)'}">${fmt$(pnl,true)}</b> · WR: <b>${wr}%</b>`;
+}
+
+function exportJournalPDF() {
+  const accName = document.getElementById('export-account').value;
+  const range   = getExportDateRange();
+  const errEl   = document.getElementById('export-error');
+  if (!accName) { errEl.textContent=currentLang==='en'?'❌ Select an account':'❌ Sélectionnez un compte'; return; }
+  if (!range)   { errEl.textContent=currentLang==='en'?'❌ Select a period':'❌ Sélectionnez une période'; return; }
+
+  const acc      = accounts.find(a=>a.name===accName)||{};
+  const filtered = trades.filter(t=>t.account===accName && range.filter(t)).sort((a,b)=>a.date.localeCompare(b.date));
+  if (!filtered.length) { errEl.textContent=currentLang==='en'?'❌ No trades for this period':'❌ Aucun trade pour cette période'; return; }
+  errEl.textContent='';
+
+  const wins   = filtered.filter(t=>t.status==='WIN');
+  const losses = filtered.filter(t=>t.status==='LOSS');
+  const be     = filtered.filter(t=>t.status==='BE');
+  const pnl    = filtered.reduce((s,t)=>s+(t.pnlNet||0),0);
+  const wr     = filtered.length>0?((wins.length/filtered.length)*100).toFixed(1):'0';
+  const avgWin = wins.length?(wins.reduce((s,t)=>s+t.pnlNet,0)/wins.length).toFixed(2):'0';
+  const avgLoss= losses.length?(losses.reduce((s,t)=>s+t.pnlNet,0)/losses.length).toFixed(2):'0';
+
+  // Balance initiale = balanceInit du PREMIER trade
+  const firstTrade = filtered[0];
+  const initBal    = firstTrade&&firstTrade.balanceInit!=null?Number(firstTrade.balanceInit):null;
+  const initBalTxt = initBal!==null?'$'+initBal.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+
+  const daysMap={}; filtered.forEach(t=>{daysMap[t.date]=1;});
+  const tradingDaysCount=Object.keys(daysMap).length;
+
+  // Balance par jour : init = finale du jour précédent
+  let runningBal=initBal!==null?initBal:0;
+  const allDates=[...new Set(filtered.map(t=>t.date))].sort();
+  const dayBalanceMap={};
+  allDates.forEach(date=>{
+    const dt=filtered.filter(t=>t.date===date);
+    const di=runningBal;
+    runningBal=parseFloat((runningBal+dt.reduce((s,t)=>s+(t.pnlNet||0),0)).toFixed(2));
+    dayBalanceMap[date]={balInit:di,balFinal:runningBal};
+  });
+  const fmtBal=v=>'$'+Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Balance finale = balFinal du DERNIER JOUR tradé de la période
+  const lastDate    = allDates[allDates.length-1];
+  const finalBal    = lastDate&&dayBalanceMap[lastDate]?dayBalanceMap[lastDate].balFinal:null;
+  const finalBalTxt = finalBal!==null?'$'+Number(finalBal).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+  const finalBalCls = pnl>=0?'pos':'neg';
+
+  // Equity SVG
+  let cumPnl=0;
+  const chartLabels=allDates.map(d=>new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'}));
+  const chartData=allDates.map(date=>{
+    const dp=filtered.filter(t=>t.date===date).reduce((s,t)=>s+(t.pnlNet||0),0);
+    cumPnl=parseFloat((cumPnl+dp).toFixed(2)); return cumPnl;
+  });
+  const svgW=780,svgH=150,padL=58,padR=18,padT=12,padB=28;
+  const plotW=svgW-padL-padR,plotH=svgH-padT-padB;
+  const cMin=Math.min(0,...chartData),cMax=Math.max(0,...chartData),cRange=cMax-cMin||1;
+  const xStep=plotW/(chartData.length-1||1);
+  const yS=v=>padT+plotH-(((v-cMin)/cRange)*plotH);
+  const zY=yS(0);
+  const pts=chartData.map((v,i)=>`${padL+i*xStep},${yS(v)}`).join(' ');
+  const aPath=`M${padL},${zY} `+chartData.map((v,i)=>`L${padL+i*xStep},${yS(v)}`).join(' ')+` L${padL+(chartData.length-1)*xStep},${zY} Z`;
+  const lineColor=pnl>=0?'#27ae60':'#e74c3c';
+  const svgChart=`<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <defs><linearGradient id="gcv" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${lineColor}" stop-opacity="0.25"/><stop offset="100%" stop-color="${lineColor}" stop-opacity="0.02"/></linearGradient></defs>
+    ${[0,.25,.5,.75,1].map(t=>`<line x1="${padL}" y1="${padT+plotH*t}" x2="${svgW-padR}" y2="${padT+plotH*t}" stroke="#ebebeb" stroke-width="1"/>`).join('')}
+    <line x1="${padL}" y1="${zY}" x2="${svgW-padR}" y2="${zY}" stroke="#ccc" stroke-width="1" stroke-dasharray="4,3"/>
+    <path d="${aPath}" fill="url(#gcv)"/>
+    <polyline points="${pts}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${chartData.map((v,i)=>`<circle cx="${padL+i*xStep}" cy="${yS(v)}" r="4" fill="${v>=0?'#27ae60':'#e74c3c'}" stroke="white" stroke-width="1.5"/>`).join('')}
+    ${chartLabels.map((l,i)=>`<text x="${padL+i*xStep}" y="${svgH-4}" text-anchor="middle" font-size="9" fill="#999" font-family="Arial">${l}</text>`).join('')}
+    ${[0,.5,1].map(t=>{const v=cMin+(cMax-cMin)*(1-t);const y=padT+plotH*t;return `<text x="${padL-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#999" font-family="Arial">${v>=0?'+':''}$${Math.round(v).toLocaleString('fr-FR')}</text>`;}).join('')}
+  </svg>`;
+
+  const win=window.open('','_blank','width=1100,height=800');
+  win.document.write(`<!DOCTYPE html><html lang="fr"><head>
+<meta charset="UTF-8"><title>NADO TRACK – ${accName} – ${range.label}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;font-size:12px;}
+  .page{padding:26px 30px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #111;}
+  .brand{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#111;} .brand span{color:#3498db;}
+  .header-meta{text-align:right;font-size:11px;color:#666;line-height:1.7;}
+  .report-title{font-size:14px;font-weight:700;margin-bottom:2px;}
+  .report-sub{font-size:11px;color:#888;margin-bottom:14px;}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+  .stat{border:1px solid #e4e4e4;border-radius:7px;padding:9px 11px;}
+  .stat-label{font-size:8px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#aaa;margin-bottom:4px;}
+  .stat-val{font-size:16px;font-weight:800;}
+  .pos{color:#27ae60;} .neg{color:#e74c3c;} .neu{color:#222;} .accent{color:#3498db;}
+  .chart-wrap{border:1px solid #eee;border-radius:8px;padding:12px 14px;margin-bottom:14px;background:#fafafa;}
+  .chart-title{font-size:11px;font-weight:700;color:#555;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:#f4f4f4;}
+  th{padding:6px 7px;text-align:left;font-size:8px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:#777;border-bottom:1px solid #ddd;white-space:nowrap;}
+  td{padding:5px 7px;border-bottom:1px solid #f0f0f0;white-space:nowrap;font-size:10px;}
+  tr:last-child td{border-bottom:none;} tr:nth-child(even){background:#fafafa;}
+  .win-row{background:#f0fff4!important;} .loss-row{background:#fff5f5!important;} .be-row{background:#f0f8ff!important;}
+  .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;text-transform:uppercase;}
+  .bwin{background:#d4edda;color:#155724;} .bloss{background:#f8d7da;color:#721c24;} .bbe{background:#d1ecf1;color:#0c5460;}
+  .summary-row td{font-weight:700;background:#f0f0f0;border-top:2px solid #ccc;}
+  .footer{margin-top:16px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10px;color:#bbb;}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.no-print{display:none;}@page{size:A4 landscape;margin:10mm;}}
+</style>
+</head><body><div class="page">
+  <div class="header">
+    <div><div class="brand">NADO <span>TRACK</span></div><div style="font-size:11px;color:#888;margin-top:2px;">Rapport de Trading</div></div>
+    <div class="header-meta">
+      <div><b>${accName}</b>${acc.firm?' — '+acc.firm:''}</div>
+      <div>Taille: ${acc.size?'$'+Number(acc.size).toLocaleString('fr-FR'):'—'}</div>
+      <div>Généneré le: ${new Date().toLocaleDateString(currentLang === 'fr' ? 'fr-FR' : 'en-US',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+  </div>
+  <div class="report-title">Journal de Trading — ${range.label}</div>
+  <div class="report-sub">${filtered.length} trades · ${tradingDaysCount} jour(s) tradé(s)</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">PnL Net</div><div class="stat-val ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+    <div class="stat"><div class="stat-label">Win Rate</div><div class="stat-val neu">${wr}%</div></div>
+    <div class="stat"><div class="stat-label">Avg Win</div><div class="stat-val pos">+$${parseFloat(avgWin).toLocaleString('fr-FR',{minimumFractionDigits:2})}</div></div>
+    <div class="stat"><div class="stat-label">Avg Loss</div><div class="stat-val neg">$${parseFloat(avgLoss).toLocaleString('fr-FR',{minimumFractionDigits:2})}</div></div>
+    <div class="stat"><div class="stat-label">Total Trades</div><div class="stat-val neu">${filtered.length}</div></div>
+    <div class="stat"><div class="stat-label">${currentLang==='en'?'Winners':'Gagnants'}</div><div class="stat-val pos">${wins.length}</div></div>
+    <div class="stat"><div class="stat-label">${currentLang==='en'?'Losers':'Perdants'}</div><div class="stat-val neg">${losses.length}</div></div>
+    <div class="stat"><div class="stat-label">Breakeven</div><div class="stat-val accent">${be.length}</div></div>
+    <div class="stat"><div class="stat-label">Jours Tradés</div><div class="stat-val neu">${tradingDaysCount}</div></div>
+    <div class="stat"><div class="stat-label">Balance Initiale</div><div class="stat-val neu">${initBalTxt}</div></div>
+    <div class="stat"><div class="stat-label">Balance Finale</div><div class="stat-val ${finalBalCls}">${finalBalTxt}</div></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title"><span>📈 Equity Curve — PNL Cumulé</span><span style="color:${lineColor};font-weight:800;">${pnl>=0?'+':''}$${Math.abs(pnl).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+    ${svgChart}
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Date</th><th>Instrument</th><th>Position</th><th>Contrats</th><th>Entrée</th><th>Sortie</th><th>SL pts</th><th>TP pts</th><th>PnL pts</th><th>PnL NET $</th><th>Statut</th><th>Bal. Init $</th><th>Bal. Finale $</th></tr></thead>
+    <tbody>
+      ${filtered.map((t,i)=>{
+        const rc=t.status==='WIN'?'win-row':t.status==='LOSS'?'loss-row':'be-row';
+        const bc=t.status==='WIN'?'bwin':t.status==='LOSS'?'bloss':'bbe';
+        const ps=t.pnlNet>=0?'+':''; const pts2=t.pnlPts>=0?'+':'';
+        const db=dayBalanceMap[t.date]||{};
+        const bi=db.balInit!=null?fmtBal(db.balInit):'—';
+        const bf=db.balFinal!=null?fmtBal(db.balFinal):'—';
+        return `<tr class="${rc}"><td>${i+1}</td><td>${t.date}</td><td><b>${t.instrument}</b></td>
+          <td style="color:${t.side==='BUY'?'#27ae60':'#e74c3c'};font-weight:700;">${t.side}</td>
+          <td>${t.qty}</td><td>${t.entry||'—'}</td><td>${t.exit||'—'}</td><td>${t.sl||'—'}</td><td>${t.tp||'—'}</td>
+          <td style="color:${t.pnlPts>=0?'#27ae60':'#e74c3c'};font-weight:600;">${t.pnlPts!=null?pts2+t.pnlPts.toFixed(2)+' pts':'—'}</td>
+          <td style="color:${t.pnlNet>=0?'#27ae60':'#e74c3c'};font-weight:700;">${ps}$${Math.abs(t.pnlNet).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td><span class="badge ${bc}">${t.status}</span></td>
+          <td style="color:#555;">${bi}</td>
+          <td style="color:${t.pnlNet>=0?'#27ae60':'#e74c3c'};font-weight:600;">${bf}</td></tr>`;
+      }).join('')}
+      <tr class="summary-row">
+        <td colspan="10" style="text-align:right;">TOTAL</td>
+        <td style="color:${pnl>=0?'#27ae60':'#e74c3c'};">${pnl>=0?'+':''}$${Math.abs(pnl).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td>${wr}% WR</td>
+        <td>${initBalTxt}</td>
+        <td style="color:${pnl>=0?'#27ae60':'#e74c3c'};font-weight:700;">${finalBalTxt}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer"><div>NADO TRACK — ${accName} — ${range.label}</div><div>Confidentiel — Usage personnel uniquement</div></div>
+  <div class="no-print" style="margin-top:18px;text-align:center;">
+    <button onclick="window.print()" style="background:#27ae60;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Imprimer / Sauvegarder en PDF</button>
+    <button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-left:10px;">Fermer</button>
+    <p style="font-size:11px;color:#aaa;margin-top:8px;">Choisir <b>"Enregistrer en PDF"</b> comme destination.</p>
+  </div>
+</div></body></html>`);
+  win.document.close();
+  setTimeout(()=>win.focus(),300);
+  closeModal('export-modal');
+  showToast(`PDF généré — ${accName} · ${range.label}`);
+}
+
+/* ─── PASSWORD SYSTEM ─── */
+const DEFAULT_PWD = 'nado2024';
+let _pendingAction   = null;
+let _pendingArg      = null;
+let _journalUnlocked = false;
+let _unlockTimer     = null;
+
+function getJournalPwd() {
+  return localStorage.getItem('qh_journal_pwd') || DEFAULT_PWD;
+}
+
+function requireJournalPwd(action, arg = null) {
+  // If already unlocked (within 5 min), execute directly
+  if (_journalUnlocked) {
+    executePwdAction(action, arg);
+    return;
+  }
+  _pendingAction = action;
+  _pendingArg    = arg;
+  document.getElementById('pwd-input').value  = '';
+  document.getElementById('pwd-error').textContent = '';
+  openModal('pwd-modal');
+  setTimeout(() => document.getElementById('pwd-input').focus(), 100);
+}
+
+function checkJournalPwd() {
+  const entered = document.getElementById('pwd-input').value;
+  if (entered === getJournalPwd()) {
+    closeModal('pwd-modal');
+    _journalUnlocked = true;
+    // Auto-lock after 5 minutes
+    clearTimeout(_unlockTimer);
+    _unlockTimer = setTimeout(() => { _journalUnlocked = false; }, 5 * 60 * 1000);
+    if (_pendingAction) {
+      executePwdAction(_pendingAction, _pendingArg);
+      _pendingAction = null;
+      _pendingArg    = null;
+    }
+  } else {
+    document.getElementById('pwd-error').textContent = '❌ Mot de passe incorrect';
+    document.getElementById('pwd-input').value = '';
+    document.getElementById('pwd-input').focus();
+  }
+}
+
+function executePwdAction(action, arg) {
+  if (action === 'openTradeModal')           openTradeModal(arg || null);
+  else if (action === 'deleteTrade')         deleteTrade(arg);
+  else if (action === '__openJournalTrade__') _openTradeForAccount(arg);
+  else if (action === '__deleteAccount__')   _doDeleteAccount(arg);
+}
+
+function changeJournalPwd() {
+  const oldPwd  = document.getElementById('pwd-old').value;
+  const newPwd  = document.getElementById('pwd-new').value;
+  const confirm = document.getElementById('pwd-confirm').value;
+  const errEl   = document.getElementById('pwd-change-error');
+
+  if (oldPwd !== getJournalPwd()) {
+    errEl.textContent = '❌ Mot de passe actuel incorrect'; return;
+  }
+  if (newPwd.length < 4) {
+    errEl.textContent = '❌ Le nouveau mot de passe doit avoir au moins 4 caractères'; return;
+  }
+  if (newPwd !== confirm) {
+    errEl.textContent = '❌ Les mots de passe ne correspondent pas'; return;
+  }
+  localStorage.setItem('qh_journal_pwd', newPwd);
+  _journalUnlocked = false;
+  closeModal('pwd-change-modal');
+  document.getElementById('pwd-old').value = '';
+  document.getElementById('pwd-new').value = '';
+  document.getElementById('pwd-confirm').value = '';
+  showToast('Mot de passe mis à jour ✔');
 }
 
 /* ─── BOOT ─── */
