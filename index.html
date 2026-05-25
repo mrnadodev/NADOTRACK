@@ -3550,12 +3550,16 @@ function applyTranslations() {
 }
 
 /* ─── SUPABASE INTEGRATION ─── */
+// Renseignez votre URL et Clé Anon Supabase ici pour pré-configurer automatiquement l'application sur tous les navigateurs.
+const DEFAULT_SUPABASE_URL = "https://eejlykhuzafsbcywtwji.supabase.co";
+const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlamx5a2h1emFmc2JjeXd0d2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MjQxMjgsImV4cCI6MjA5NTMwMDEyOH0.fdZypIAGjuHlaSKLOHF-E8i_eWEMiI1RiQTjFQ21Yrs";
+
 let supabaseClient = null;
 let userSession = null;
 
 function initSupabase() {
-  const sbUrl = localStorage.getItem('qh_sb_url');
-  const sbKey = localStorage.getItem('qh_sb_key');
+  const sbUrl = localStorage.getItem('qh_sb_url') || DEFAULT_SUPABASE_URL;
+  const sbKey = localStorage.getItem('qh_sb_key') || DEFAULT_SUPABASE_KEY;
   if (sbUrl && sbKey && window.supabase) {
     try {
       supabaseClient = window.supabase.createClient(sbUrl, sbKey, {
@@ -3596,7 +3600,7 @@ function updateCloudUI() {
   const btnEl = document.getElementById('cloud-btn');
   if (!iconEl || !labelEl) return;
   
-  const sbUrl = localStorage.getItem('qh_sb_url');
+  const sbUrl = localStorage.getItem('qh_sb_url') || DEFAULT_SUPABASE_URL;
   if (!sbUrl) {
     iconEl.textContent = '☁️';
     labelEl.textContent = currentLang === 'fr' ? 'Configuration Cloud' : 'Cloud Setup';
@@ -3818,8 +3822,8 @@ async function syncShareLinksToCloud() {
 }
 
 function openCloudModal() {
-  const sbUrl = localStorage.getItem('qh_sb_url') || '';
-  const sbKey = localStorage.getItem('qh_sb_key') || '';
+  const sbUrl = localStorage.getItem('qh_sb_url') || DEFAULT_SUPABASE_URL || '';
+  const sbKey = localStorage.getItem('qh_sb_key') || DEFAULT_SUPABASE_KEY || '';
   
   document.getElementById('sb-url-input').value = sbUrl;
   document.getElementById('sb-key-input').value = sbKey;
