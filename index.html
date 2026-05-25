@@ -1043,7 +1043,7 @@ tbody td {
             <th data-i18n="th_date">Date</th><th data-i18n="th_account">Compte</th><th data-i18n="th_propfirm">Propfirm</th><th data-i18n="th_balance_init">Bal. Init $</th>
             <th data-i18n="th_instrument">Instrument</th><th data-i18n="th_position">Position</th><th data-i18n="th_contracts">Contrats</th>
             <th data-i18n="th_entry">Entrée</th><th data-i18n="th_sl">SL pts</th><th data-i18n="th_tp">TP pts</th><th data-i18n="th_exit">Sortie</th>
-            <th data-i18n="th_pnl_pts">PnL pts</th><th data-i18n="th_pnl_net">PnL NET $</th><th data-i18n="th_status">Statut</th><th data-i18n="th_balance_final">Bal. Finale $</th>
+            <th data-i18n="th_pnl_pts">PnL pts</th><th data-i18n="th_pnl_gross">Gros PnL $</th><th data-i18n="th_pnl_net">PnL NET $</th><th data-i18n="th_status">Statut</th><th data-i18n="th_balance_final">Bal. Finale $</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -1517,6 +1517,10 @@ tbody td {
         <input class="form-control" id="t-exit" type="number" step="0.01" oninput="calcTrade()">
       </div>
       <div class="form-group">
+        <label class="form-label" data-i18n="pnl_net_label">PnL Net ($)</label>
+        <input class="form-control" id="t-pnl-net" type="number" step="0.01" oninput="calcTrade()" placeholder="Manuel après comm.">
+      </div>
+      <div class="form-group">
         <label class="form-label" data-i18n="acc_status_label">Statut</label>
         <select class="form-control" id="t-status">
           <option>WIN</option><option>LOSS</option><option>BE</option>
@@ -1529,6 +1533,10 @@ tbody td {
       <div>
         <div class="stat-label">PnL pts</div>
         <div class="text-mono fw-700" id="calc-pnl-pts" style="font-size:18px">—</div>
+      </div>
+      <div>
+        <div class="stat-label">Gros PnL $</div>
+        <div class="text-mono fw-700" id="calc-pnl-gross" style="font-size:18px">—</div>
       </div>
       <div>
         <div class="stat-label">PnL NET $</div>
@@ -1626,6 +1634,7 @@ async function saveCloud() {
           exit: t.exit,
           pnl_pts: t.pnlPts,
           pnl_net: t.pnlNet,
+          pnl_gross: t.pnlGross !== undefined && t.pnlGross !== null ? t.pnlGross : t.pnlNet,
           status: t.status,
           firm: t.firm || '',
           balance_init: t.balanceInit || 0,
@@ -2294,6 +2303,7 @@ function openTradeModal(id = null) {
     document.getElementById('t-sl').value           = t.sl;
     document.getElementById('t-tp').value           = t.tp;
     document.getElementById('t-exit').value         = t.exit;
+    document.getElementById('t-pnl-net').value      = t.pnlNet !== undefined && t.pnlNet !== null ? t.pnlNet : '';
     document.getElementById('t-status').value       = t.status;
     // Force single mode when editing
     document.getElementById('trade-single-account').style.display = '';
@@ -2306,7 +2316,7 @@ function openTradeModal(id = null) {
     document.getElementById('t-instrument').value = 'MES';
     document.getElementById('t-side').value = 'BUY';
     document.getElementById('t-qty').value = 1;
-    ['t-entry','t-sl','t-tp','t-exit'].forEach(i => document.getElementById(i).value = '');
+    ['t-entry','t-sl','t-tp','t-exit','t-pnl-net'].forEach(i => document.getElementById(i).value = '');
     document.getElementById('t-status').value = 'WIN';
   }
   calcTrade();
@@ -2325,18 +2335,20 @@ function saveTrade() {
   const side  = document.getElementById('t-side').value;
   const tv    = TICK_VALUES[inst];
 
-  let pnlPts = 0, pnlNet = 0;
+  let pnlPts = 0, pnlGross = 0;
   if (entry && exit && tv) {
     const raw = side === 'BUY' ? exit - entry : entry - exit;
     pnlPts = raw;
-    pnlNet = (raw / tv.tick) * tv.dollarPerTick * qty;
+    pnlGross = (raw / tv.tick) * tv.dollarPerTick * qty;
   }
+
+  const pnlNet = parseFloat(document.getElementById('t-pnl-net').value) || 0;
 
   const commonFields = {
     date, instrument: inst, side, qty, entry,
     sl:     parseFloat(document.getElementById('t-sl').value) || 0,
     tp:     parseFloat(document.getElementById('t-tp').value) || 0,
-    exit, pnlPts, pnlNet,
+    exit, pnlPts, pnlNet, pnlGross,
     status: document.getElementById('t-status').value,
   };
 
@@ -2417,23 +2429,34 @@ function calcTrade() {
   const side  = document.getElementById('t-side').value;
   const tv    = TICK_VALUES[inst];
 
-  let pnlPts = 0, pnlNet = 0;
+  let pnlPts = 0, pnlGross = 0;
   if (entry && exit && tv) {
     const raw = side === 'BUY' ? exit - entry : entry - exit;
     pnlPts = raw;
     const ticks = raw / tv.tick;
-    pnlNet = ticks * tv.dollarPerTick * qty;
+    pnlGross = ticks * tv.dollarPerTick * qty;
   }
+
+  // Auto-populate PnL Net if empty and Gross PnL is calculated
+  const pnlNetInput = document.getElementById('t-pnl-net');
+  if (pnlNetInput && pnlNetInput.value === '' && pnlGross !== 0) {
+    pnlNetInput.value = pnlGross.toFixed(2);
+  }
+
+  let pnlNet = parseFloat(pnlNetInput ? pnlNetInput.value : 0);
+  if (isNaN(pnlNet)) pnlNet = 0;
 
   const balFinal = binit + pnlNet;
   const tickInfo = tv ? `1 tick = $${tv.dollarPerTick} | tick size = ${tv.tick}` : '—';
 
   document.getElementById('calc-pnl-pts').textContent  = pnlPts   ? pnlPts.toFixed(2)  + ' pts' : '—';
+  document.getElementById('calc-pnl-gross').textContent = pnlGross ? fmt$(pnlGross, true) : '—';
   document.getElementById('calc-pnl-net').textContent  = pnlNet   ? fmt$(pnlNet, true)  : '—';
   document.getElementById('calc-bal-final').textContent = binit ? fmt$(balFinal) : '—';
   document.getElementById('calc-tick').textContent     = tickInfo;
 
   document.getElementById('calc-pnl-pts').className = 'text-mono fw-700 ' + pnlClass(pnlPts);
+  document.getElementById('calc-pnl-gross').className = 'text-mono fw-700 ' + pnlClass(pnlGross);
   document.getElementById('calc-pnl-net').className  = 'text-mono fw-700 ' + pnlClass(pnlNet);
   document.getElementById('calc-bal-final').className = 'text-mono fw-700 ' + pnlClass(pnlNet);
 }
@@ -2484,6 +2507,7 @@ function renderJournal() {
       <td class="text-mono">${t.tp || '—'}</td>
       <td class="text-mono">${t.exit || '—'}</td>
       <td class="text-mono ${pnlClass(t.pnlPts)}">${t.pnlPts != null ? t.pnlPts.toFixed(2)+' pts' : '—'}</td>
+      <td class="text-mono ${pnlClass(t.pnlGross)}">${fmt$(t.pnlGross != null ? t.pnlGross : t.pnlNet, true)}</td>
       <td class="text-mono ${pnlClass(t.pnlNet)}">${fmt$(t.pnlNet, true)}</td>
       <td>${badgeTrade(t.status)}</td>
       <td class="text-mono">${fmt$(t.balanceFinal)}</td>
@@ -3220,7 +3244,8 @@ const TRANSLATIONS = {
     th_date: 'Date', th_balance_init: 'Bal. Init $', th_instrument: 'Instrument',
     th_position: 'Position', th_contracts: 'Contrats', th_entry: 'Entrée',
     th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Sortie', th_pnl_pts: 'PnL pts',
-    th_pnl_net: 'PnL NET $', th_balance_final: 'Balance finale $',
+    th_pnl_gross: 'Gros PnL $', th_pnl_net: 'PnL NET $', th_balance_final: 'Balance finale $',
+    pnl_net_label: 'PnL Net ($)', pnl_gross_label: 'Gros PnL (Calculé)',
     th_day: 'Jour', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
     th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
     // Share
@@ -3425,7 +3450,8 @@ const TRANSLATIONS = {
     th_date: 'Date', th_balance_init: 'Init Bal. $', th_instrument: 'Instrument',
     th_position: 'Position', th_contracts: 'Contracts', th_entry: 'Entry',
     th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Exit', th_pnl_pts: 'PnL pts',
-    th_pnl_net: 'PnL NET $', th_balance_final: 'Final Balance $',
+    th_pnl_gross: 'Gross PNL $', th_pnl_net: 'PnL NET $', th_balance_final: 'Final Balance $',
+    pnl_net_label: 'PnL Net ($)', pnl_gross_label: 'Gross PnL (Calculated)',
     th_day: 'Day', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
     th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
     // Share
@@ -3685,6 +3711,7 @@ async function syncAndLoadData() {
       exit: t.exit ? parseFloat(t.exit) : null,
       pnlPts: t.pnl_pts ? parseFloat(t.pnl_pts) : null,
       pnlNet: parseFloat(t.pnl_net),
+      pnlGross: t.pnl_gross ? parseFloat(t.pnl_gross) : (t.pnl_net ? parseFloat(t.pnl_net) : 0),
       status: t.status
     }));
     
@@ -3763,6 +3790,7 @@ async function syncLocalToCloud() {
           exit: t.exit,
           pnl_pts: t.pnlPts,
           pnl_net: t.pnlNet,
+          pnl_gross: t.pnlGross !== undefined && t.pnlGross !== null ? t.pnlGross : t.pnlNet,
           status: t.status,
           firm: t.firm || '',
           balance_init: t.balanceInit || 0,
