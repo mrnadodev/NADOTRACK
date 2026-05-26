@@ -1434,6 +1434,61 @@ tbody td {
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL — WITHDRAWALS -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="withdrawal-modal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-title">💸 <span id="with-modal-title">Gestion des Retraits</span></div>
+    <input type="hidden" id="with-account-name">
+
+    <!-- Form block -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);margin-bottom:10px;">Ajouter un nouveau retrait</div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-control" id="with-date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Montant ($)</label>
+          <input class="form-control" id="with-amount" type="number" step="0.01" placeholder="1000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Statut</label>
+          <select class="form-control" id="with-status">
+            <option value="reussi">Réussi</option>
+            <option value="attente">En attente</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-16 w-full" onclick="addWithdrawal()">💸 Confirmer le retrait</button>
+    </div>
+
+    <!-- History block -->
+    <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);margin-bottom:8px;">Historique des retraits</div>
+    <div class="table-wrap" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius2);">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Montant</th>
+            <th>Statut</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="with-history-tbody">
+          <tr><td colspan="4" class="empty-state">Aucun retrait effectué</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="form-actions mt-16">
+      <button class="btn btn-secondary" onclick="closeModal('withdrawal-modal')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- MODAL — TRADE -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="trade-modal">
@@ -1580,6 +1635,7 @@ const PROPFIRMS = ['Apex','FTMO','MFF','TopStep','Funded Next','The5ers','E8 Fun
 /* ─── STATE ─── */
 let accounts = [];
 let trades   = [];
+let withdrawals = [];
 let equityChart = null;
 let currentWeekOffset = 0;
 let currentLang = localStorage.getItem('qh_lang') || 'fr';
@@ -1647,6 +1703,29 @@ async function saveCloud() {
       });
       await supabaseClient.from('trades').insert(toInsert);
     }
+
+    // Sync withdrawals (with graceful schema fail-safe)
+    try {
+      await supabaseClient.from('withdrawals').delete().eq('user_id', userId);
+      if (typeof withdrawals !== 'undefined' && withdrawals && withdrawals.length > 0) {
+        const withInsert = withdrawals.map(w => {
+          const item = {
+            user_id: userId,
+            account: w.account,
+            amount: w.amount || 0,
+            date: w.date,
+            status: w.status || 'reussi'
+          };
+          if (w.id && uuidRegex.test(w.id)) {
+            item.id = w.id;
+          }
+          return item;
+        });
+        await supabaseClient.from('withdrawals').insert(withInsert);
+      }
+    } catch (e) {
+      console.warn("Failed to sync withdrawals to cloud, table might not exist yet:", e);
+    }
   } catch (err) {
     console.error("Cloud save failed:", err);
     showToast(currentLang === 'fr' ? "Erreur d'enregistrement Cloud" : "Cloud save error", 'error');
@@ -1656,6 +1735,7 @@ async function saveCloud() {
 function save() {
   localStorage.setItem('qh_accounts', JSON.stringify(accounts));
   localStorage.setItem('qh_trades',   JSON.stringify(trades));
+  localStorage.setItem('qh_withdrawals', JSON.stringify(withdrawals));
   if (supabaseClient && userSession) {
     saveCloud();
   }
@@ -1664,6 +1744,7 @@ function save() {
 function load() {
   try { accounts = JSON.parse(localStorage.getItem('qh_accounts')) || []; } catch { accounts = []; }
   try { trades   = JSON.parse(localStorage.getItem('qh_trades'))   || []; } catch { trades = [];   }
+  try { withdrawals = JSON.parse(localStorage.getItem('qh_withdrawals')) || []; } catch { withdrawals = []; }
 }
 
 /* ─── ID GEN ─── */
@@ -1871,13 +1952,19 @@ function getTrailingDDDetails(accName) {
   const ddLeft      = last ? last.ddLeft     : eodDD;
   const finalFloor  = last ? last.ddFloor    : (size - eodDD);
   const totalPnl    = balance - size;
+  
+  // Deduct successful withdrawals from account balance
+  const accWithdrawals = (window.withdrawals || []).filter(w => w.account === accName && w.status === 'reussi');
+  const totalWithdrawn = accWithdrawals.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+  const balanceAfterWith = balance - totalWithdrawn;
+
   const toObjective = Math.max(0, objAmt - totalPnl);
 
   return {
     ddFloor:      finalFloor,
     ddConsumed,
     ddLeft,
-    balance,
+    balance:      balanceAfterWith,
     totalPnl,
     toObjective,
     eodDD,
@@ -2185,6 +2272,7 @@ function renderAccounts() {
   </div>
   <div class="divider"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end" onclick="event.stopPropagation()">
+    ${(a.accountType || 'evaluation') === 'funded' ? `<button class="action-btn" onclick="openWithdrawalModal('${a.name}')" title="Gérer les retraits">💸 Retraits</button>` : ''}
     <button class="action-btn" onclick="openAccountModal('${a.id}')">✏️</button>
     <button class="action-btn del" onclick="deleteAccount('${a.id}')">🗑️</button>
   </div>
@@ -2211,6 +2299,7 @@ function renderAccounts() {
       <td class="text-mono ${ddLeft <= 0 ? 'neg' : 'pos'}">${fmt$(ddLeft)}</td>
       <td class="text-mono ${pnlClass(-dd.toObjective)}">${dd.toObjective > 0 ? fmt$(dd.toObjective) : '✅'}</td>
       <td>
+        ${(a.accountType || 'evaluation') === 'funded' ? `<button class="action-btn" onclick="openWithdrawalModal('${a.name}')" title="Gérer les retraits" style="margin-right:4px;">💸</button>` : ''}
         <button class="action-btn" onclick="openAccountModal('${a.id}')">✏️</button>
         <button class="action-btn del" onclick="deleteAccount('${a.id}')">🗑️</button>
       </td>
@@ -3687,6 +3776,18 @@ async function syncAndLoadData() {
       
     if (shareError) throw shareError;
     
+    // Load withdrawals (with graceful schema fail-safe)
+    let cloudWithdrawals = [];
+    try {
+      const { data, error } = await supabaseClient
+        .from('withdrawals')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error) cloudWithdrawals = data || [];
+    } catch (e) {
+      console.warn("Withdrawals table might not exist yet:", e);
+    }
+    
     if (cloudAccounts.length === 0 && cloudTrades.length === 0 && (accounts.length > 0 || trades.length > 0)) {
       const confirmSync = confirm(currentLang === 'fr' 
         ? "Votre base Cloud est vide mais vous avez des données locales. Voulez-vous envoyer vos données locales vers le Cloud ?"
@@ -3740,6 +3841,14 @@ async function syncAndLoadData() {
       createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now()
     }));
     
+    withdrawals = cloudWithdrawals.map(w => ({
+      id: w.id,
+      account: w.account,
+      amount: parseFloat(w.amount || 0),
+      date: w.date,
+      status: w.status || 'reussi'
+    }));
+    
     populateAccountSelects();
     renderAccounts();
     renderJournal();
@@ -3766,6 +3875,11 @@ async function syncLocalToCloud() {
     await supabaseClient.from('accounts').delete().eq('user_id', userId);
     await supabaseClient.from('trades').delete().eq('user_id', userId);
     await supabaseClient.from('share_links').delete().eq('user_id', userId);
+    try {
+      await supabaseClient.from('withdrawals').delete().eq('user_id', userId);
+    } catch (e) {
+      console.warn("Withdrawals table delete failed or table doesn't exist:", e);
+    }
     
     if (accounts.length > 0) {
       const accountsToInsert = accounts.map(a => {
@@ -3835,6 +3949,29 @@ async function syncLocalToCloud() {
       
       const { error: shareError } = await supabaseClient.from('share_links').insert(sharesToInsert);
       if (shareError) throw shareError;
+    }
+    
+    // Sync withdrawals (with graceful schema fail-safe)
+    try {
+      if (typeof withdrawals !== 'undefined' && withdrawals && withdrawals.length > 0) {
+        const withInsert = withdrawals.map(w => {
+          const item = {
+            user_id: userId,
+            account: w.account,
+            amount: w.amount || 0,
+            date: w.date,
+            status: w.status || 'reussi'
+          };
+          if (w.id && uuidRegex.test(w.id)) {
+            item.id = w.id;
+          }
+          return item;
+        });
+        const { error: withError } = await supabaseClient.from('withdrawals').insert(withInsert);
+        if (withError) throw withError;
+      }
+    } catch (e) {
+      console.warn("Failed to sync withdrawals in syncLocalToCloud:", e);
     }
     
     showToast(currentLang === 'fr' ? 'Données synchronisées avec succès !' : 'Data synchronized successfully!');
@@ -4914,6 +5051,86 @@ function changeJournalPwd() {
   document.getElementById('pwd-new').value = '';
   document.getElementById('pwd-confirm').value = '';
   showToast('Mot de passe mis à jour ✔');
+}
+
+/* ─── WITHDRAWALS MANAGEMENT ─── */
+function openWithdrawalModal(accName) {
+  document.getElementById('with-account-name').value = accName;
+  document.getElementById('with-modal-title').textContent = `💸 Retraits — ${accName}`;
+  document.getElementById('with-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('with-amount').value = '';
+  document.getElementById('with-status').value = 'reussi';
+  
+  renderWithdrawalHistory(accName);
+  openModal('withdrawal-modal');
+}
+
+function renderWithdrawalHistory(accName) {
+  const tbody = document.getElementById('with-history-tbody');
+  const accWith = (window.withdrawals || []).filter(w => w.account === accName);
+  
+  if (!accWith.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${currentLang==='en'?'No withdrawals made yet.':'Aucun retrait effectué.'}</td></tr>`;
+    return;
+  }
+  
+  accWith.sort((x, y) => y.date.localeCompare(x.date));
+  
+  tbody.innerHTML = accWith.map(w => {
+    const statusBadge = w.status === 'reussi' 
+      ? `<span class="badge badge-actif">${currentLang==='en'?'Succeeded':'Réussi'}</span>` 
+      : `<span class="badge badge-attente">${currentLang==='en'?'Pending':'En attente'}</span>`;
+      
+    return `<tr>
+      <td>${w.date}</td>
+      <td class="text-mono fw-700" style="color:var(--red);">${fmt$(w.amount)}</td>
+      <td>${statusBadge}</td>
+      <td>
+        <button class="action-btn del" onclick="deleteWithdrawal('${w.id}', '${accName}')" title="Supprimer">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function addWithdrawal() {
+  const accName = document.getElementById('with-account-name').value;
+  const date = document.getElementById('with-date').value;
+  const amt = parseFloat(document.getElementById('with-amount').value) || 0;
+  const status = document.getElementById('with-status').value;
+  
+  if (!date) { showToast(currentLang==='en'?'Please select a date':'Renseignez la date', 'error'); return; }
+  if (amt <= 0) { showToast(currentLang==='en'?'Enter a valid amount superior to 0':'Renseignez un montant valide supérieur à 0', 'error'); return; }
+  
+  const dd = getTrailingDDDetails(accName);
+  if (status === 'reussi' && amt > dd.balance) {
+    showToast(currentLang==='en'?`Amount exceeds available balance (${fmt$(dd.balance)})`:`Montant supérieur au solde disponible (${fmt$(dd.balance)})`, 'error');
+    return;
+  }
+  
+  const w = {
+    id: uid(),
+    account: accName,
+    amount: amt,
+    date: date,
+    status: status
+  };
+  
+  if (!window.withdrawals) window.withdrawals = [];
+  window.withdrawals.push(w);
+  
+  save();
+  renderWithdrawalHistory(accName);
+  renderAccounts();
+  showToast(currentLang==='en'?'Withdrawal added successfully':'Retrait ajouté avec succès');
+}
+
+function deleteWithdrawal(id, accName) {
+  if (!confirm(currentLang==='en'?'Delete this withdrawal?':'Supprimer ce retrait ?')) return;
+  window.withdrawals = (window.withdrawals || []).filter(w => w.id !== id);
+  save();
+  renderWithdrawalHistory(accName);
+  renderAccounts();
+  showToast(currentLang==='en'?'Withdrawal deleted':'Retrait supprimé');
 }
 
 /* ─── BOOT ─── */
