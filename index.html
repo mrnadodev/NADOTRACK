@@ -1518,7 +1518,7 @@ tbody td {
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="pnl_net_label">PnL Net ($)</label>
-        <input class="form-control" id="t-pnl-net" type="number" step="0.01" oninput="calcTrade()" placeholder="Manuel après comm.">
+        <input class="form-control" id="t-pnl-net" type="number" step="0.01" oninput="calcTrade()" data-i18n-placeholder="pnl_net_placeholder" placeholder="⚠️ Saisir PnL Net ($) obligatoire...">
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="acc_status_label">Statut</label>
@@ -2342,7 +2342,20 @@ function saveTrade() {
     pnlGross = (raw / tv.tick) * tv.dollarPerTick * qty;
   }
 
-  const pnlNet = parseFloat(document.getElementById('t-pnl-net').value) || 0;
+  const pnlNetStr = document.getElementById('t-pnl-net').value.trim();
+  if (pnlNetStr === '') {
+    showToast(currentLang === 'fr' ? 'Veuillez saisir le PnL Net' : 'Please input PnL Net', 'error');
+    return;
+  }
+  let pnlNet = parseFloat(pnlNetStr);
+  if (isNaN(pnlNet)) {
+    showToast(currentLang === 'fr' ? 'Veuillez saisir un nombre valide' : 'Please input a valid number', 'error');
+    return;
+  }
+  if (pnlPts < 0 && pnlNet > 0) {
+    pnlNet = -pnlNet;
+    document.getElementById('t-pnl-net').value = pnlNet;
+  }
 
   const commonFields = {
     date, instrument: inst, side, qty, entry,
@@ -2437,28 +2450,31 @@ function calcTrade() {
     pnlGross = ticks * tv.dollarPerTick * qty;
   }
 
-  // Auto-populate PnL Net if empty and Gross PnL is calculated
   const pnlNetInput = document.getElementById('t-pnl-net');
-  if (pnlNetInput && pnlNetInput.value === '' && pnlGross !== 0) {
-    pnlNetInput.value = pnlGross.toFixed(2);
-  }
+  let pnlNet = parseFloat(pnlNetInput ? pnlNetInput.value : '');
+  const hasNet = pnlNetInput && pnlNetInput.value.trim() !== '' && !isNaN(pnlNet);
 
-  let pnlNet = parseFloat(pnlNetInput ? pnlNetInput.value : 0);
-  if (isNaN(pnlNet)) pnlNet = 0;
+  // Enforce: if points are negative, PnL net cannot be positive
+  if (hasNet) {
+    if (pnlPts < 0 && pnlNet > 0) {
+      pnlNet = -pnlNet;
+      pnlNetInput.value = pnlNet;
+    }
+  }
 
   const balFinal = binit + pnlNet;
   const tickInfo = tv ? `1 tick = $${tv.dollarPerTick} | tick size = ${tv.tick}` : '—';
 
   document.getElementById('calc-pnl-pts').textContent  = pnlPts   ? pnlPts.toFixed(2)  + ' pts' : '—';
   document.getElementById('calc-pnl-gross').textContent = pnlGross ? fmt$(pnlGross, true) : '—';
-  document.getElementById('calc-pnl-net').textContent  = pnlNet   ? fmt$(pnlNet, true)  : '—';
-  document.getElementById('calc-bal-final').textContent = binit ? fmt$(balFinal) : '—';
+  document.getElementById('calc-pnl-net').textContent  = hasNet   ? fmt$(pnlNet, true)  : '—';
+  document.getElementById('calc-bal-final').textContent = (binit && hasNet) ? fmt$(balFinal) : '—';
   document.getElementById('calc-tick').textContent     = tickInfo;
 
   document.getElementById('calc-pnl-pts').className = 'text-mono fw-700 ' + pnlClass(pnlPts);
   document.getElementById('calc-pnl-gross').className = 'text-mono fw-700 ' + pnlClass(pnlGross);
-  document.getElementById('calc-pnl-net').className  = 'text-mono fw-700 ' + pnlClass(pnlNet);
-  document.getElementById('calc-bal-final').className = 'text-mono fw-700 ' + pnlClass(pnlNet);
+  document.getElementById('calc-pnl-net').className  = 'text-mono fw-700 ' + (hasNet ? pnlClass(pnlNet) : '');
+  document.getElementById('calc-bal-final').className = 'text-mono fw-700 ' + (hasNet ? pnlClass(pnlNet) : '');
 }
 
 function deleteTrade(id) {
@@ -3246,6 +3262,7 @@ const TRANSLATIONS = {
     th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Sortie', th_pnl_pts: 'PnL pts',
     th_pnl_gross: 'Gros PnL $', th_pnl_net: 'PnL NET $', th_balance_final: 'Balance finale $',
     pnl_net_label: 'PnL Net ($)', pnl_gross_label: 'Gros PnL (Calculé)',
+    pnl_net_placeholder: '⚠️ Saisir PnL Net ($) obligatoire...',
     th_day: 'Jour', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
     th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
     // Share
@@ -3452,6 +3469,7 @@ const TRANSLATIONS = {
     th_sl: 'SL pts', th_tp: 'TP pts', th_exit: 'Exit', th_pnl_pts: 'PnL pts',
     th_pnl_gross: 'Gross PNL $', th_pnl_net: 'PnL NET $', th_balance_final: 'Final Balance $',
     pnl_net_label: 'PnL Net ($)', pnl_gross_label: 'Gross PnL (Calculated)',
+    pnl_net_placeholder: '⚠️ Enter PnL Net ($) mandatory...',
     th_day: 'Day', th_trades: 'Trades', th_wins: 'Wins', th_losses: 'Loss',
     th_be: 'BE', th_winpct: 'Win %', th_losspct: 'Loss %', th_pnlnet: 'PnL net $',
     // Share
